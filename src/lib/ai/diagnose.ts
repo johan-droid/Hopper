@@ -6,6 +6,9 @@
  * 3. Relevant Log Lines
  * 4. Suggested Next Check
  * 5. Local Repro Command
+ *
+ * Supports live LLM providers (Anthropic Claude 3.5 Haiku / OpenAI)
+ * with robust deterministic offline heuristic fallback.
  */
 
 import { z } from 'zod';
@@ -97,11 +100,76 @@ export function buildDiagnosisUserPrompt(params: DiagnosisContext): string {
 }
 
 /**
- * Intelligent diagnostic synthesizer.
- * If external LLM key is absent or AI_PROVIDER=mock, produces deterministic, high-signal
- * analysis from parsed stack traces and correlated git commit changes.
+ * Calls live Anthropic Claude 3.5 Haiku API.
  */
-export async function synthesizeDiagnosis(params: DiagnosisContext): Promise<DiagnosisOutput> {
+async function callAnthropicLlm(params: DiagnosisContext, apiKey: string): Promise<DiagnosisOutput> {
+  const model = process.env.AI_MODEL || 'claude-3-5-haiku-20241022';
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1024,
+      system: buildDiagnosisSystemPrompt(),
+      messages: [
+        {
+          role: 'user',
+          content: buildDiagnosisUserPrompt(params),
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Anthropic API returned status ${response.status}: ${err}`);
+  }
+
+  const data = (await response.json()) as any;
+  const rawText = data.content?.[0]?.text || '';
+  const parsedJson = JSON.parse(rawText);
+  return DiagnosisOutputSchema.parse(parsedJson);
+}
+
+/**
+ * Calls live OpenAI GPT-4o-mini API with structured JSON output.
+ */
+async function callOpenAiLlm(params: DiagnosisContext, apiKey: string): Promise<DiagnosisOutput> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: buildDiagnosisSystemPrompt() },
+        { role: 'user', content: buildDiagnosisUserPrompt(params) },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`OpenAI API returned status ${response.status}: ${err}`);
+  }
+
+  const data = (await response.json()) as any;
+  const rawText = data.choices?.[0]?.message?.content || '{}';
+  const parsedJson = JSON.parse(rawText);
+  return DiagnosisOutputSchema.parse(parsedJson);
+}
+
+/**
+ * Deterministic rule-based synthesizer used for offline development and fallback.
+ */
+export function synthesizeDeterministicDiagnosis(params: DiagnosisContext): DiagnosisOutput {
   const snippet = params.slicedLogSnippet;
   const isOOM = params.exitCode === 137 || /exit code 137|Out of memory|Killed/i.test(snippet);
   const isTimeout = /timeout|timed out|exceeded/i.test(snippet);
@@ -130,7 +198,6 @@ export async function synthesizeDiagnosis(params: DiagnosisContext): Promise<Dia
     };
   });
 
-  // Ensure between 3 and 12 items for schema compliance
   while (extractedLines.length < 3) {
     extractedLines.push({
       line_number: 100 + extractedLines.length,
@@ -139,7 +206,6 @@ export async function synthesizeDiagnosis(params: DiagnosisContext): Promise<Dia
     });
   }
 
-  // Correlate modified files
   const matchingFiles = params.modifiedFiles.filter((f) => snippet.includes(f));
   const fileContext = matchingFiles.length > 0
     ? `Directly correlated with recently modified file "${matchingFiles[0]}".`
@@ -180,6 +246,33 @@ export async function synthesizeDiagnosis(params: DiagnosisContext): Promise<Dia
     local_repro_command: reproCommand,
   };
 
-  // Validate strictly against schema before returning
   return DiagnosisOutputSchema.parse(result);
+}
+
+/**
+ * Intelligent diagnostic synthesizer.
+ * Calls Anthropic or OpenAI when API keys are available, with seamless
+ * fallback to deterministic heuristic synthesis.
+ */
+export async function synthesizeDiagnosis(params: DiagnosisContext): Promise<DiagnosisOutput> {
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  const openAiKey = process.env.OPENAI_API_KEY;
+
+  if (process.env.AI_PROVIDER !== 'mock') {
+    if (anthropicKey && !anthropicKey.includes('mock')) {
+      try {
+        return await callAnthropicLlm(params, anthropicKey);
+      } catch (err: any) {
+        console.warn(`[AI] Anthropic diagnosis failed: ${err.message}. Falling back to deterministic analysis.`);
+      }
+    } else if (openAiKey && !openAiKey.includes('mock')) {
+      try {
+        return await callOpenAiLlm(params, openAiKey);
+      } catch (err: any) {
+        console.warn(`[AI] OpenAI diagnosis failed: ${err.message}. Falling back to deterministic analysis.`);
+      }
+    }
+  }
+
+  return synthesizeDeterministicDiagnosis(params);
 }

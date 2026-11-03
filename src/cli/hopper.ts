@@ -55,6 +55,37 @@ program
     console.log('\nDoctor status: Ready for development & production building.\n');
   });
 
+// Command: migrate
+program
+  .command('migrate')
+  .description('Run PostgreSQL DDL migrations and seed optional demo data')
+  .option('--seed', 'Seed sample organizations and signatures after migration')
+  .action(async (options) => {
+    try {
+      console.log('\n📦 Running Hopper Database Migrations...');
+      const { runMigrations, seedInitialData, checkDatabaseHealth } = await import('../db/index.js');
+
+      const health = await checkDatabaseHealth();
+      if (!health.isHealthy) {
+        console.warn(`  ⚠️ Database connection warning: ${health.error}`);
+        console.log('  Ensure PostgreSQL is running or start it via docker-compose up -d hopper-postgres\n');
+        return;
+      }
+
+      const res = await runMigrations();
+      console.log(`  ✔ Migration status: ${res.details}`);
+
+      if (options.seed) {
+        const seedRes = await seedInitialData();
+        console.log(`  ✔ Seed status: ${seedRes.details}`);
+      }
+      console.log('\nDatabase setup complete.\n');
+    } catch (err: any) {
+      console.error('\n✖ Migration failed:', err.message, '\n');
+      process.exit(1);
+    }
+  });
+
 // Command: simulate
 program
   .command('simulate')

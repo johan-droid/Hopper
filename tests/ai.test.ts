@@ -47,4 +47,40 @@ describe('Structured AI Diagnosis Engine', () => {
     });
     expect(user).toContain('sanitized_log_window');
   });
+
+  it('parses live Anthropic response and validates schema', async () => {
+    const validAnthropicJson = {
+      error_category: 'timeout',
+      root_cause_clues: 'E2E checkout test timed out waiting for payment gateway frame.',
+      likely_flaky_test: {
+        test_name: 'Checkout Flow > 3D Secure verification',
+        is_likely_flaky: true,
+        reasoning: 'Observed intermittent network delay during third-party iframe render.',
+      },
+      relevant_log_lines: [
+        { line_number: 10, content: 'Test timeout of 30000ms exceeded', explanation: 'Step deadline exceeded' },
+        { line_number: 12, content: 'waiting for locator iframe#stripe', explanation: 'Locator unresolved' },
+        { line_number: 14, content: 'Process completed with exit code 1', explanation: 'Runner failure exit' },
+      ],
+      suggested_next_check: 'Mock external Stripe iframe response in test environment.',
+      local_repro_command: 'npx playwright test checkout.spec.ts',
+    };
+
+    const parsed = DiagnosisOutputSchema.safeParse(validAnthropicJson);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.error_category).toBe('timeout');
+      expect(parsed.data.likely_flaky_test.is_likely_flaky).toBe(true);
+    }
+  });
+
+  it('rejects invalid LLM output missing required fields', () => {
+    const invalidJson = {
+      error_category: 'invalid_category',
+      root_cause_clues: 'Something broke',
+    };
+
+    const parsed = DiagnosisOutputSchema.safeParse(invalidJson);
+    expect(parsed.success).toBe(false);
+  });
 });

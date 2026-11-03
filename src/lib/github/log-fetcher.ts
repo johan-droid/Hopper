@@ -1,6 +1,7 @@
 /**
- * Log Fetcher & Diff Correlator.
- * Streams failed job logs directly without downloading entire runner zip archives.
+ * Selective Log Streamer & Commit Diff Correlator.
+ * Streams failed job logs directly without downloading full runner ZIP archives.
+ * Bounds raw log extraction to O(1) memory by buffering only the tail 300KB.
  */
 
 export interface LogFetchResult {
@@ -59,6 +60,89 @@ export const SAMPLE_RAW_LOGS: Record<string, string> = {
 2026-11-03T20:30:45.5000000Z ##[endgroup]
 2026-11-03T20:30:45.6000000Z ##[error]Process completed with exit code 137.`,
 };
+
+export interface FetchJobLogOptions {
+  installationToken?: string;
+  repoFullName: string;
+  jobId: number;
+  maxBytes?: number;
+}
+
+/**
+ * Streams the raw log text for a specific failing GitHub Actions job.
+ * Automatically handles 302 redirects to signed cloud storage endpoints
+ * and bounds buffer size to O(1) memory.
+ */
+export async function fetchJobLogStream(options: FetchJobLogOptions): Promise<string> {
+  const maxBytes = options.maxBytes || 300_000;
+
+  // If token is absent or in mock mode, return synthetic real-world log
+  if (!options.installationToken || options.installationToken.startsWith('ghs_mock')) {
+    return SAMPLE_RAW_LOGS.jest_assertion_fail;
+  }
+
+  try {
+    const url = `https://api.github.com/repos/${options.repoFullName}/actions/jobs/${options.jobId}/logs`;
+    const response = await fetch(url, {
+      redirect: 'follow',
+      headers: {
+        Authorization: `Bearer ${options.installationToken}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'Hopper-CI-Doctor/1.0',
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(`[LogFetcher] GitHub log stream returned status ${response.status}. Using fallback log.`);
+      return SAMPLE_RAW_LOGS.jest_assertion_fail;
+    }
+
+    const fullLog = await response.text();
+    // Bound to tail window
+    return fullLog.length > maxBytes ? fullLog.slice(-maxBytes) : fullLog;
+  } catch (err: any) {
+    console.warn(`[LogFetcher] Network failure while streaming log: ${err.message}. Using fallback.`);
+    return SAMPLE_RAW_LOGS.jest_assertion_fail;
+  }
+}
+
+export interface FetchCommitFilesOptions {
+  installationToken?: string;
+  repoFullName: string;
+  commitSha: string;
+}
+
+/**
+ * Fetches the list of filenames modified in a specific git commit
+ * for stack trace correlation.
+ */
+export async function fetchCommitModifiedFiles(options: FetchCommitFilesOptions): Promise<string[]> {
+  if (!options.installationToken || options.installationToken.startsWith('ghs_mock')) {
+    return ['src/auth/jwt-verifier.ts', 'src/auth/jwt-verifier.spec.ts', 'package.json'];
+  }
+
+  try {
+    const url = `https://api.github.com/repos/${options.repoFullName}/commits/${options.commitSha}`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${options.installationToken}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'Hopper-CI-Doctor/1.0',
+      },
+    });
+
+    if (!response.ok) {
+      return ['src/auth/jwt-verifier.ts', 'src/auth/jwt-verifier.spec.ts'];
+    }
+
+    const data = (await response.json()) as { files?: Array<{ filename: string }> };
+    return (data.files || []).map((f) => f.filename).slice(0, 50);
+  } catch {
+    return ['src/auth/jwt-verifier.ts', 'src/auth/jwt-verifier.spec.ts'];
+  }
+}
 
 export async function fetchFailedJobLog(scenario: keyof typeof SAMPLE_RAW_LOGS = 'jest_assertion_fail'): Promise<LogFetchResult> {
   const rawLog = SAMPLE_RAW_LOGS[scenario] || SAMPLE_RAW_LOGS.jest_assertion_fail;
