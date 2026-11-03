@@ -4,6 +4,9 @@ import {
   checkTenantRateLimit,
   checkRedisHealth,
   getRedisUrl,
+  claimWebhookDelivery,
+  acquireDiagnosisLock,
+  releaseDiagnosisLock,
 } from '../src/queue/redis.js';
 import {
   enqueueWorkflowJob,
@@ -75,8 +78,63 @@ describe('Redis & Queue Infrastructure', () => {
     expect(res.remaining).toBe(10);
   });
 
-  it('checks Redis health status correctly', async () => {
-    const mockHealthyRedis = {
+  it('deduplicates webhook deliveries with a 24h NX marker', async () => {
+    let stored = false;
+    const mockRedis = {
+      set: async (key: string, value: string, ...args: any[]) => {
+        expect(key).toBe('gh:delivery:delivery-uuid-1');
+        expect(value).toBe('1');
+        expect(args).toEqual(['EX', 86400, 'NX']);
+        if (stored) return null;
+        stored = true;
+        return 'OK';
+      },
+    };
+
+    setCustomRedis(mockRedis);
+    expect(await claimWebhookDelivery('delivery-uuid-1')).toBe(true);
+    expect(await claimWebhookDelivery('delivery-uuid-1')).toBe(false);
+  });
+
+  it('fails open on Redis errors during webhook deduplication', async () => {
+    setCustomRedis({
+      set: async () => {
+        throw new Error('Redis connection down');
+      },
+    });
+
+    expect(await claimWebhookDelivery('delivery-uuid-2')).toBe(true);
+  });
+
+  it('acquires and releases a fingerprint-scoped diagnosis lock', async () => {
+    const fingerprint = 'a'.repeat(64);
+    let acquiredOnce = false;
+    const mockRedis = {
+      set: async (key: string, value: string, ...args: any[]) => {
+        expect(key).toBe(`lock:diagnose:repo-1:${fingerprint}`);
+        expect(args).toEqual(['EX', 45, 'NX']);
+        if (acquiredOnce) return null;
+        acquiredOnce = true;
+        return 'OK';
+      },
+      eval: async (_script: string, _numKeys: number, key: string, token: string) => {
+        expect(key).toBe(`lock:diagnose:repo-1:${fingerprint}`);
+        expect(token).toBeDefined();
+        return 1;
+      },
+    };
+
+    setCustomRedis(mockRedis);
+    const lock = await acquireDiagnosisLock('repo-1', fingerprint);
+    expect(lock.acquired).toBe(true);
+
+    const second = await acquireDiagnosisLock('repo-1', fingerprint);
+    expect(second.acquired).toBe(false);
+
+    await releaseDiagnosisLock(lock.key, lock.token);
+  });
+
+  it('checks Redis health status correctly', async () => {    const mockHealthyRedis = {
       ping: async () => 'PONG',
     };
     setCustomRedis(mockHealthyRedis);

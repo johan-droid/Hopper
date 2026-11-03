@@ -17,20 +17,30 @@ export async function runMigrations(
   rootDir: string = process.cwd()
 ): Promise<MigrationResult> {
   const db = executor || getDatabaseExecutor();
-  const schemaPath = path.join(rootDir, 'supabase', 'migrations', '0001_initial_schema.sql');
+  const migrationsDir = path.join(rootDir, 'supabase', 'migrations');
 
-  if (!fs.existsSync(schemaPath)) {
-    throw new Error(`Migration file not found at: ${schemaPath}`);
+  if (!fs.existsSync(migrationsDir)) {
+    throw new Error(`Migrations directory not found at: ${migrationsDir}`);
   }
 
-  const ddlSql = fs.readFileSync(schemaPath, 'utf8');
+  const migrationFiles = fs
+    .readdirSync(migrationsDir)
+    .filter((file) => file.endsWith('.sql'))
+    .sort();
 
-  // Execute DDL against PostgreSQL
-  await db.query(ddlSql);
+  if (migrationFiles.length === 0) {
+    throw new Error(`No .sql migration files found in: ${migrationsDir}`);
+  }
+
+  // Each migration is idempotent (IF NOT EXISTS), so applying all files in order is safe.
+  for (const file of migrationFiles) {
+    const ddlSql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+    await db.query(ddlSql);
+  }
 
   return {
     applied: true,
-    details: '0001_initial_schema.sql executed successfully (5 tables, indexes & pgvector).',
+    details: `${migrationFiles.join(', ')} executed successfully (tables, indexes, HNSW vector index).`,
   };
 }
 

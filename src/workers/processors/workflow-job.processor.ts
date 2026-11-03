@@ -4,7 +4,7 @@
  * cloud moat fingerprinting, flakiness tracking, and DB persistence.
  */
 
-import { Job } from 'bullmq';
+import { Job, DelayedError } from 'bullmq';
 import { WorkflowJobEventData, JobDiagnosticResult } from '../../queue/types.js';
 import { sliceFailedStepLog } from '../../lib/parser/log-slicer.js';
 import { computeFailureSignature } from '../../lib/parser/fingerprinter.js';
@@ -15,6 +15,7 @@ import { renderGitHubPrComment, upsertPrStickyComment } from '../../lib/github/p
 import { checkQuota } from '../../lib/billing/quota-guard.js';
 import { SAMPLE_RAW_LOGS, fetchJobLogStream, fetchCommitModifiedFiles } from '../../lib/github/log-fetcher.js';
 import { getInstallationToken } from '../../lib/github/app-auth.js';
+import { acquireDiagnosisLock, releaseDiagnosisLock, DiagnosisLock } from '../../queue/redis.js';
 import {
   OrganizationRepository,
   RepositoryRepository,
@@ -35,7 +36,8 @@ export interface ProcessorDependencies {
 
 export async function processWorkflowJob(
   jobData: WorkflowJobEventData,
-  deps: ProcessorDependencies = {}
+  deps: ProcessorDependencies = {},
+  job?: Job<WorkflowJobEventData>
 ): Promise<JobDiagnosticResult> {
   const orgRepo = deps.orgRepo || new OrganizationRepository(deps.executor);
   const repoRepo = deps.repoRepo || new RepositoryRepository(deps.executor);
@@ -148,6 +150,20 @@ export async function processWorkflowJob(
     sliced.detectedTestIdentifier,
     sliced.cleanedSnippet
   );
+
+  // 2.5. Matrix Burst Lock - prevent parallel matrix failures with same fingerprint from calling LLM simultaneously
+  let diagnosisLock: DiagnosisLock | null = null;
+  if (job) {
+    const repoId = repo.id;
+    const fingerprintHash = signatureObj.signatureHash;
+    const lockKey = `lock:diagnose:${repoId}:${fingerprintHash}`;
+    diagnosisLock = await acquireDiagnosisLock(repoId, fingerprintHash);
+    if (!diagnosisLock.acquired) {
+      // Another worker is currently diagnosing this exact signature; requeue with a short delay to read the cached result
+      await job.moveToDelayed(Date.now() + 5000, job.token);
+      throw new DelayedError();
+    }
+  }
 
   // 3. Cloud Moat Lookup / Upsert
   const isMainBranch = jobData.branch === (repo.default_branch || 'main');
@@ -331,6 +347,10 @@ export async function processWorkflowJob(
     }
   }
 
+  if (diagnosisLock) {
+    await releaseDiagnosisLock(diagnosisLock.key, diagnosisLock.token);
+  }
+
   return {
     status: 'diagnosed',
     signatureHash: signatureObj.signatureHash,
@@ -345,5 +365,5 @@ export async function processWorkflowJob(
  * BullMQ Worker Handler adapter.
  */
 export async function handleWorkflowJob(job: Job<WorkflowJobEventData>): Promise<JobDiagnosticResult> {
-  return processWorkflowJob(job.data);
+  return processWorkflowJob(job.data, {}, job);
 }

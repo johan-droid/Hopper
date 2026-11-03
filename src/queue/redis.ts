@@ -97,8 +97,71 @@ export async function checkTenantRateLimit(
   }
 }
 
-export async function closeRedis(): Promise<void> {
-  if (defaultRedisClient) {
+/**
+ * Marks a GitHub webhook delivery as seen.
+ * Returns true when this is the first time the delivery ID is processed,
+ * false when it is a replay. Fails open if Redis is unavailable.
+ */
+export async function claimWebhookDelivery(
+  deliveryId: string,
+  ttlSeconds: number = 86400
+): Promise<boolean> {
+  try {
+    const client = getRedisClient();
+    const result = await client.set(`gh:delivery:${deliveryId}`, '1', 'EX', ttlSeconds, 'NX');
+    return result === 'OK';
+  } catch (_err) {
+    // If Redis is unreachable, do not drop webhooks that have not actually been deduplicated
+    return true;
+  }
+}
+
+export interface DiagnosisLock {
+  acquired: boolean;
+  key: string;
+  token: string;
+}
+
+/**
+ * Acquires a short-lived lock so parallel matrix jobs with the same failure
+ * fingerprint do not call the LLM simultaneously.
+ */
+export async function acquireDiagnosisLock(
+  repoId: string,
+  fingerprintHash: string,
+  ttlSeconds: number = 45
+): Promise<DiagnosisLock> {
+  const key = `lock:diagnose:${repoId}:${fingerprintHash}`;
+  const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  try {
+    const client = getRedisClient();
+    const result = await client.set(key, token, 'EX', ttlSeconds, 'NX');
+    return { acquired: result === 'OK', key, token };
+  } catch (_err) {
+    // Fail open: a Redis outage must not block diagnosis
+    return { acquired: true, key, token };
+  }
+}
+
+/**
+ * Releases a diagnosis lock only if this caller still owns it.
+ */
+export async function releaseDiagnosisLock(key: string, token: string): Promise<void> {
+  try {
+    const client = getRedisClient();
+    await client.eval(
+      "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+      1,
+      key,
+      token
+    );
+  } catch (_err) {
+    // Lock expires on its own; a failed release must not fail the diagnosis
+  }
+}
+
+export async function closeRedis(): Promise<void> {  if (defaultRedisClient) {
     try {
       await defaultRedisClient.quit();
     } catch {

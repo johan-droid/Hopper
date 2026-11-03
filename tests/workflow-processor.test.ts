@@ -1,9 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { DelayedError } from 'bullmq';
 import { processWorkflowJob } from '../src/workers/processors/workflow-job.processor.js';
+import { setCustomRedis } from '../src/queue/redis.js';
 import { WorkflowJobEventData } from '../src/queue/types.js';
 import { Organization, Repository, FailureSignature, WorkflowFailure, DiagnosticReport } from '../src/db/types.js';
 
 describe('WorkflowJobProcessor (BullMQ Worker)', () => {
+  afterEach(() => {
+    setCustomRedis(null);
+  });
   const baseEvent: WorkflowJobEventData = {
     installationId: 20202,
     orgLogin: 'hopper-labs',
@@ -268,5 +273,34 @@ Process completed with exit code 1.
     expect(result.status).toBe('diagnosed');
     expect(reportRootCause).toContain('[CACHED]');
     expect(reportRootCause).toContain('Network gateway handshake timed out');
+  });
+
+  it('delays a matrix job while another worker diagnoses the same fingerprint', async () => {
+    setCustomRedis({
+      set: async () => null,
+    });
+
+    let delayedUntil = 0;
+    const fakeJob = {
+      token: 'worker-token',
+      moveToDelayed: async (timestamp: number) => {
+        delayedUntil = timestamp;
+      },
+    } as any;
+
+    const mockDeps = {
+      orgRepo: {
+        upsert: async () => ({ id: 'org-1', plan: 'pro_dev', runs_used_this_period: 0 }),
+        incrementRunsUsed: async () => ({}),
+      } as any,
+      repoRepo: {
+        upsert: async () => ({ id: 'repo-1', default_branch: 'main' }),
+      } as any,
+    };
+
+    const run = processWorkflowJob(baseEvent, mockDeps, fakeJob);
+
+    await expect(run).rejects.toBeInstanceOf(DelayedError);
+    expect(delayedUntil).toBeGreaterThan(Date.now());
   });
 });

@@ -10,7 +10,7 @@ import { sliceFailedStepLog } from '../lib/parser/log-slicer.js';
 import { computeFailureSignature } from '../lib/parser/fingerprinter.js';
 import { calculateFlakinessScore } from '../lib/moat/flakiness-engine.js';
 import { synthesizeDiagnosis } from '../lib/ai/diagnose.js';
-import { checkTenantRateLimit, checkRedisHealth } from '../queue/redis.js';
+import { checkTenantRateLimit, checkRedisHealth, claimWebhookDelivery } from '../queue/redis.js';
 import { enqueueWorkflowJob } from '../queue/ci-queue.js';
 import { processWorkflowJob } from '../workers/processors/workflow-job.processor.js';
 import { WorkflowJobEventData } from '../queue/types.js';
@@ -73,6 +73,15 @@ export function createServer() {
 
     if (!isValid) {
       return res.status(401).json({ error: 'Invalid HMAC-SHA256 signature' });
+    }
+
+    // 1.5. Webhook Replay Deduplication - use x-github-delivery header with a 24h TTL
+    const deliveryId = req.headers['x-github-delivery'] as string | undefined;
+    if (deliveryId) {
+      const isNewDelivery = await claimWebhookDelivery(deliveryId);
+      if (!isNewDelivery) {
+        return res.status(200).json({ status: 'duplicate_ignored' });
+      }
     }
 
     const payload = req.body;
