@@ -14,7 +14,6 @@ COPY package*.json ./
 RUN npm ci
 
 # Copy source code and configurations
-COPY tsconfig.json tsup.config.ts ./
 COPY src/ ./src/
 COPY supabase/ ./supabase/
 
