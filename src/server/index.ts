@@ -253,7 +253,10 @@ export function createServer() {
     }
     
     // Get tenant stats
-    const tenantStats = await orgRepo.getTenantStats(org.id);
+    const tenantStats = {
+      monthlyRunLimit: org.monthly_run_limit,
+      runsUsedThisPeriod: org.runs_used_this_period,
+    };
     
     // Get flaky test leaderboard - top flaky signatures for this organization's repos
     const repos = await repoRepo.listByOrgId(org.id);
