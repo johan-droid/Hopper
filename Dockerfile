@@ -9,6 +9,7 @@ WORKDIR /app
 
 # Copy dependency manifests
 COPY package*.json ./
+COPY tsup.config.json tsconfig.json ./
 
 # Install all dependencies (including dev)
 RUN npm ci
