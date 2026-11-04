@@ -14,7 +14,7 @@ export function getRedisUrl(): string {
 
 export function createRedisConnection(): Redis {
   const url = getRedisUrl();
-  return new Redis(url, {
+  const client = new Redis(url, {
     maxRetriesPerRequest: null, // Required for BullMQ
     enableReadyCheck: false,
     retryStrategy: (times) => {
@@ -23,6 +23,10 @@ export function createRedisConnection(): Redis {
     },
     lazyConnect: true,
   });
+  client.on('error', (_err) => {
+    // Suppress unhandled event emission in local offline development
+  });
+  return client;
 }
 
 export function setCustomRedis(client: any): void {

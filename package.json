@@ -1,53 +1,26 @@
 {
-  "name": "hopper",
+  "name": "hopper-workspace",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
   "description": "Hopper - Next-Generation CI/CD Failure Diagnosis Engine & Unified SDLC Lifecycle Runner",
-  "main": "dist/index.js",
-  "bin": {
-    "hopper": "./bin/hopper.js"
-  },
-  "scripts": {
-    "dev": "tsx watch src/server/index.ts",
-    "build": "tsup --config tsup.config.json",
-    "lint": "tsc --noEmit",
-    "test": "vitest run --no-cache",
-    "test:watch": "vitest",
-    "doctor": "tsx src/cli/hopper.ts doctor",
-    "migrate": "tsx src/cli/hopper.ts migrate",
-    "simulate": "tsx src/cli/hopper.ts simulate",
-    "lifecycle": "tsx src/cli/hopper.ts lifecycle",
-    "start": "node dist/server/index.js",
-    "test:smoke": "vitest run tests/backend-smoke.test.ts"
-  },
-  "keywords": [
-    "ci-cd",
-    "failure-diagnosis",
-    "grace-hopper",
-    "sdlc",
-    "flakiness-detection",
-    "devops",
-    "github-actions"
+  "workspaces": [
+    "backend",
+    "frontend"
   ],
-  "author": "Hopper Engineering",
-  "license": "Apache-2.0",
-  "dependencies": {
-    "bullmq": "^6.5.4",
-    "chalk": "^5.3.0",
-    "commander": "^12.1.0",
-    "dotenv": "^16.4.5",
-    "express": "^4.21.1",
-    "ioredis": "^5.4.1",
-    "pg": "^8.13.1",
-    "zod": "^3.23.8"
+  "scripts": {
+    "dev": "npm --prefix backend run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "lint": "npm --prefix backend run lint && npm --prefix frontend run lint",
+    "test": "npm --prefix backend run test",
+    "test:backend": "npm --prefix backend run test",
+    "test:frontend": "npm --prefix frontend run test",
+    "start": "npm --prefix backend start"
   },
-  "devDependencies": {
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.8.7",
-    "@types/pg": "^8.11.10",
-    "tsup": "^8.3.5",
-    "tsx": "^4.19.2",
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.4"
-  }
+  "author": "Hopper Engineering",
+  "license": "Apache-2.0"
 }

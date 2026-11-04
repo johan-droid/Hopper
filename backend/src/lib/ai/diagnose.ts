@@ -33,8 +33,9 @@ export const DiagnosisOutputSchema = z.object({
   relevant_log_lines: z
     .array(
       z.object({
-        line_number: z.number(),
-        content: z.string(),
+        // Log references must identify a real, one-based source line.
+        line_number: z.number().int().positive(),
+        content: z.string().min(1),
         explanation: z.string().describe('Short 5-8 word note on why this line matters'),
       })
     )

@@ -76,4 +76,36 @@ describe('GitHub Webhook Gateway & Auth', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+
+  it('handles CORS preflight and origin reflection correctly', async () => {
+    const server = createServer().listen(0);
+    await new Promise<void>((resolve) => server.once('listening', () => resolve()));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    try {
+      // 1. Preflight OPTIONS request
+      const preflight = await fetch(`http://127.0.0.1:${port}/api/health`, {
+        method: 'OPTIONS',
+        headers: {
+          'Origin': 'http://localhost:5173',
+          'Access-Control-Request-Method': 'GET',
+        },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+      expect(preflight.headers.get('access-control-allow-credentials')).toBe('true');
+
+      // 2. Normal GET request with Origin
+      const res = await fetch(`http://127.0.0.1:${port}/api/health`, {
+        headers: {
+          'Origin': 'http://localhost:5173',
+        },
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
 });
