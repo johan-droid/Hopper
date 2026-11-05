@@ -28,6 +28,50 @@ import { WorkflowFailureRepository } from '../db/repositories/workflow-failure.r
 export function createServer() {
   const app = express();
 
+  // ============================================================================
+  // Environment Validation — Fail fast if mandatory configuration is missing
+  // ============================================================================
+  const mandatoryEnvs = [
+    'NODE_ENV',
+    'DATABASE_URL',
+    'DIRECT_URL',
+    'REDIS_URL',
+    'GITHUB_APP_ID',
+    'GITHUB_APP_CLIENT_ID',
+    'GITHUB_APP_CLIENT_SECRET',
+    'GITHUB_APP_WEBHOOK_SECRET',
+    // GITHUB_APP_PRIVATE_KEY is checked separately (may have newlines)
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+    'STRIPE_PRICE_ID_PRO_DEV_9',
+    'STRIPE_PRICE_ID_TEAM_29',
+  ];
+
+  for (const env of mandatoryEnvs) {
+    if (!process.env[env]) {
+      console.error(`[Hopper] Missing mandatory environment variable: ${env}`);
+      process.exit(1);
+    }
+  }
+
+  // Validate GitHub App private key
+  const privateKey = process.env.GITHUB_APP_PRIVATE_KEY?.trim();
+  if (!privateKey) {
+    console.error('[Hopper] Missing mandatory environment variable: GITHUB_APP_PRIVATE_KEY');
+    process.exit(1);
+  }
+
+  // Validate AI provider configuration
+  const aiProvider = process.env.AI_PROVIDER || 'mock';
+  if (aiProvider !== 'mock') {
+    const hasAnthropic = !!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_API_KEY.includes('mock');
+    const hasOpenAI = !!process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes('mock');
+    if (!hasAnthropic && !hasOpenAI) {
+      console.error('[Hopper] AI provider selected but no valid ANTHROPIC_API_KEY or OPENAI_API_KEY found');
+      process.exit(1);
+    }
+  }
+
   // Initialize repositories
   const orgRepo = new OrganizationRepository();
   const repoRepo = new RepositoryRepository();
@@ -40,6 +84,10 @@ export function createServer() {
     .map(o => o.trim());
 
   app.use((req: Request, res: Response, next) => {
+    // Correlation / request ID — forward if provided, generate if not
+    const requestId = req.headers['x-request-id'] || `hopper-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    res.setHeader('x-request-id', requestId);
+
     const origin = req.headers.origin as string | undefined;
     if (origin && (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production')) {
       res.setHeader('Access-Control-Allow-Origin', origin);
@@ -528,6 +576,24 @@ export function createServer() {
       version: '1.0.0',
       frontend: process.env.FRONTEND_URL || 'http://localhost:5173',
       health: '/api/health',
+    });
+  });
+
+  // ============================================================================
+  // Global Error Handler — Consistent error response format
+  // ============================================================================
+  app.use((err: any, _req: Request, res: Response, _next: any) => {
+    const status = err.statusCode || err.status || 500;
+    const message = err.message || 'Internal Server Error';
+    console.error(`[Hopper] ${err.requestId || 'unknown'} ${err.stack || err.message}`);
+    res.status(status).json({
+      status: 'error',
+      error: {
+        message,
+        path: _req.path,
+        method: _req.method,
+        requestId: res.get('x-request-id'),
+      },
     });
   });
 

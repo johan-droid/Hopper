@@ -6,21 +6,51 @@ export type PlanTier = 'free' | 'pro_dev' | 'team';
 interface AppState {
   activeTab: AppTab;
   selectedOrg: string;
-  simulatedPlan: PlanTier;
-  selectedSignatureId: string | null;
+  planTier: PlanTier;
+  supabaseUser: any | null;
+  sessionExpired: boolean;
   setTab: (tab: AppTab) => void;
   setSelectedOrg: (org: string) => void;
-  setSimulatedPlan: (plan: PlanTier) => void;
-  inspectSignature: (sigId: string) => void;
+  setPlanTier: (plan: PlanTier) => void;
+  setSupabaseUser: (user: any | null) => void;
+  setSessionExpired: (expired: boolean) => void;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set) => ({
   activeTab: 'overview',
   selectedOrg: 'acme-corp',
-  simulatedPlan: 'free',
-  selectedSignatureId: 'sig_7f8a91c20e14',
+  planTier: 'free',
+  supabaseUser: null,
+  sessionExpired: false,
   setTab: (tab) => set({ activeTab: tab }),
   setSelectedOrg: (org) => set({ selectedOrg: org }),
-  setSimulatedPlan: (plan) => set({ simulatedPlan: plan }),
-  inspectSignature: (sigId) => set({ selectedSignatureId: sigId, activeTab: 'signatures' }),
+  setPlanTier: (plan) => set({ planTier: plan }),
+  setSupabaseUser: (user) => set({ supabaseUser: user }),
+  setSessionExpired: (expired) => set({ sessionExpired: expired }),
+  signIn: async (email, password) => {
+    const { supabase } = window as unknown as { supabase: any };
+    const { user, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    set({ supabaseUser: user });
+  },
+  signUp: async (email, password) => {
+    const { supabase } = window as unknown as { supabase: any };
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+  },
+  signOut: async () => {
+    const { supabase } = window as unknown as { supabase: any };
+    await supabase.auth.signOut();
+    set({ supabaseUser: null, sessionExpired: false });
+    // supabase used for auth sign-out
+  },
+  resetPassword: async (email) => {
+    const { supabase } = window as unknown as { supabase: any };
+    const { error } = await supabase.auth.resetForPassword({ email });
+    if (error) throw error;
+  },
 }));

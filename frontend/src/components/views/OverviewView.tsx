@@ -4,10 +4,10 @@ import { useDashboardQuery } from '../../api/hooks';
 import { ShieldAlert, Zap, Lock, ArrowRight } from 'lucide-react';
 
 export const OverviewView: React.FC = () => {
-  const { selectedOrg, simulatedPlan, setSimulatedPlan, inspectSignature, setTab } = useAppStore();
+  const { selectedOrg, planTier, setTab, setPlanTier } = useAppStore();
   const { data: dashboard, isLoading, error } = useDashboardQuery(selectedOrg);
 
-  const isFreePlan = simulatedPlan === 'free';
+  const isFreePlan = planTier === 'free';
   const usedRuns = dashboard?.runsUsedThisPeriod ?? 14;
   const limitRuns = isFreePlan ? 30 : dashboard?.monthlyRunsLimit ?? 250;
   const quotaPercent = Math.min(100, Math.round((usedRuns / limitRuns) * 100));
@@ -220,7 +220,7 @@ export const OverviewView: React.FC = () => {
                         </span>
                       ) : (
                         <button
-                          onClick={() => inspectSignature(item.sigId || 'sig_7f8a91c20e14')}
+                          onClick={() => setTab('signatures')}
                           className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white transition-colors cursor-pointer text-[11px]"
                         >
                           Inspect ↗
@@ -252,7 +252,7 @@ export const OverviewView: React.FC = () => {
                     Upgrade to Pro ($9/mo) <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => setSimulatedPlan('pro_dev')}
+                    onClick={() => setPlanTier('pro_dev')}
                     className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-white/10 transition-colors cursor-pointer"
                   >
                     Preview Unlocked Mode

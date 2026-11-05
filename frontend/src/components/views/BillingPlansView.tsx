@@ -4,7 +4,7 @@ import { useCheckoutMutation } from '../../api/hooks';
 import { Check, ArrowRight, Sparkles } from 'lucide-react';
 
 export const BillingPlansView: React.FC = () => {
-  const { simulatedPlan, setSimulatedPlan, selectedOrg } = useAppStore();
+  const { planTier, selectedOrg } = useAppStore();
   const checkoutMutation = useCheckoutMutation();
 
   const handleCheckout = async (plan: 'pro_dev' | 'team') => {
@@ -18,11 +18,11 @@ export const BillingPlansView: React.FC = () => {
       if (res.checkoutUrl) {
         window.location.href = res.checkoutUrl;
       } else {
-        setSimulatedPlan(plan);
+        setPlanTier(plan);
         alert(`Activated ${plan === 'pro_dev' ? 'Solo / Pro Dev' : 'Small Team'} plan in local mode!`);
       }
     } catch {
-      setSimulatedPlan(plan);
+      setPlanTier(plan);
       alert(`Switched active organization to ${plan} tier.`);
     }
   };

@@ -4,13 +4,15 @@ import { useSignatureQuery } from '../../api/hooks';
 import { ArrowLeft, Copy, Check, Sparkles, GitBranch, GitPullRequest, Clock } from 'lucide-react';
 
 export const SignatureInspectorView: React.FC = () => {
-  const { selectedSignatureId, setTab } = useAppStore();
-  const { data: signatureData, isLoading } = useSignatureQuery(selectedSignatureId);
+  const { setTab } = useAppStore();
+  // Use first signature from local state or default
+  const [signatureId, setSignatureId] = useState<string>('sig_7f8a91c20e14');
+  const { data: signatureData, isLoading } = useSignatureQuery(signatureId);
   const [copied, setCopied] = useState(false);
 
   // Fallback demo signature if backend returns null
   const sig = signatureData || {
-    id: selectedSignatureId || 'sig_7f8a91c20e14',
+    id: signatureId,
     signatureHash: 'sha256:7f8a91c20e149d8c3621980be103f6f1c4a921d7',
     normalizedTemplate: 'Error: Timeout of 30000ms exceeded waiting for selector [data-testid=3ds-challenge-frame]',
     testIdentifier: 'tests/checkout.spec.ts › Checkout Flow › 3D Secure verification modal',
