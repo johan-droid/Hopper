@@ -19,7 +19,10 @@
     "test": "npm --prefix backend run test",
     "test:backend": "npm --prefix backend run test",
     "test:frontend": "npm --prefix frontend run test",
-    "start": "npm --prefix backend start"
+    "start": "npm --prefix backend start",
+    "local": "node scripts/local/start.mjs",
+    "local:stop": "node scripts/local/stop.mjs",
+    "local:status": "node scripts/local/status.mjs"
   },
   "author": "Hopper Engineering",
   "license": "Apache-2.0"

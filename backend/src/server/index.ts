@@ -4,6 +4,9 @@
  * performs tenant rate-limiting in Redis, and dispatches events to BullMQ.
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express, { Request, Response } from 'express';
 import { verifyGitHubWebhookSignature } from '../lib/github/app-auth.js';
 import { sliceFailedStepLog } from '../lib/parser/log-slicer.js';
