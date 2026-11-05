@@ -25,7 +25,7 @@ jobs:
         run: npm ci
 
       - name: Hopper Unified Lifecycle Pipeline
-        run: npm run lifecycle
+        run: npm --prefix backend run lifecycle
 
       - name: Verify Docker Build
-        run: docker build -t hopper:latest .
+        run: docker build -t hopper:latest ./backend
