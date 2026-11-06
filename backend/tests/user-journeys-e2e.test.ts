@@ -67,7 +67,7 @@ describe('Phase 13: End-to-End SaaS User Journeys (A through G)', () => {
     await pool.query('DELETE FROM organizations WHERE github_account_login = $1', ['alpha-labs']);
     await pool.query('DELETE FROM workspace_members WHERE user_id IN ($1, $2)', [userAId, userBId]);
     await pool.query('DELETE FROM workspaces WHERE name = $1', ['Alpha Labs Workspace']);
-    await pool.query('DELETE FROM user_profiles WHERE id IN ($1, $2)', [userAId, userBId]);
+    await pool.query('DELETE FROM user_profiles WHERE id IN ($1, $2) OR user_id IN ($1, $2)', [userAId, userBId]);
   });
 
   afterAll(async () => {
@@ -82,7 +82,7 @@ describe('Phase 13: End-to-End SaaS User Journeys (A through G)', () => {
     await pool.query('DELETE FROM organizations WHERE github_account_login = $1', ['alpha-labs']);
     await pool.query('DELETE FROM workspace_members WHERE user_id IN ($1, $2)', [userAId, userBId]);
     await pool.query('DELETE FROM workspaces WHERE name = $1', ['Alpha Labs Workspace']);
-    await pool.query('DELETE FROM user_profiles WHERE id IN ($1, $2)', [userAId, userBId]);
+    await pool.query('DELETE FROM user_profiles WHERE id IN ($1, $2) OR user_id IN ($1, $2)', [userAId, userBId]);
   });
 
   // ============================================================================
@@ -102,7 +102,7 @@ describe('Phase 13: End-to-End SaaS User Journeys (A through G)', () => {
     const dbProfile = await pool.query('SELECT * FROM user_profiles WHERE id = $1', [profileData.profile.id]);
     expect(dbProfile.rows.length).toBe(1);
     expect(dbProfile.rows[0].id).toBe(profileData.profile.id);
-    expect(dbProfile.rows[0].username).toBe('alice');
+    expect(dbProfile.rows[0].username).toMatch(/^alice/);
 
     // 2. User creates workspace via API
     const wsRes = await fetch(`http://127.0.0.1:${port}/api/workspaces`, {

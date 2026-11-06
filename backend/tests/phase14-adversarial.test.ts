@@ -49,6 +49,9 @@ describe('Phase 14: Adversarial Reliability & Architecture Audit', () => {
   let tokenBeta: string;
 
   beforeAll(async () => {
+    process.env.GITHUB_APP_WEBHOOK_SECRET = process.env.GITHUB_APP_WEBHOOK_SECRET || 'gh_dev_webhook_secret_for_local_testing_at_least_20_chars';
+    process.env.STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_test_mock_secret_key_for_local_testing';
+
     // Spin up test server
     const app = createServer();
     await new Promise<void>((resolve) => {
@@ -159,10 +162,8 @@ describe('Phase 14: Adversarial Reliability & Architecture Audit', () => {
       const betaAccessRes = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/members`, {
         headers: { Authorization: `Bearer ${tokenBeta}` },
       });
-      if (betaAccessRes.status !== 200) {
-        console.error('Beta access error:', await betaAccessRes.json());
-      }
-      expect(betaAccessRes.status).toBe(200);
+      const betaAccessJson = await betaAccessRes.json();
+      expect(betaAccessRes.status, JSON.stringify(betaAccessJson)).toBe(200);
 
       // 4. Alpha immediately revokes Beta's membership
       const revokeRes = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/members/${profileBeta.id}`, {

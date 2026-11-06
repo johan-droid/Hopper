@@ -76,6 +76,12 @@ BEGIN
     ALTER TABLE workspace_members DROP CONSTRAINT workspace_members_role_check;
     ALTER TABLE workspace_members ADD CONSTRAINT workspace_members_role_check CHECK (role IN ('owner', 'admin', 'developer', 'member', 'viewer'));
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'workspace_members' AND column_name = 'created_at') THEN
+    ALTER TABLE workspace_members ADD COLUMN created_at TIMESTAMPTZ DEFAULT NOW();
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'workspace_members' AND column_name = 'joined_at') THEN
+    ALTER TABLE workspace_members ADD COLUMN joined_at TIMESTAMPTZ DEFAULT NOW();
+  END IF;
 END $$;
 
 -- 4. Workspace invitations

@@ -129,7 +129,7 @@ export class WorkspaceRepository {
       FROM workspace_members wm
       JOIN user_profiles up ON wm.user_id = up.id
       WHERE wm.workspace_id = $1
-      ORDER BY wm.created_at ASC
+      ORDER BY wm.joined_at ASC
     `;
     const res = await this.db.query<WorkspaceMemberDetail>(sql, [workspaceId]);
     return res.rows;

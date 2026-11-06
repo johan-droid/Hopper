@@ -70,7 +70,10 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/hopper_db
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: test-super-secret-jwt-key-minimum-32-chars-long
+          SUPABASE_JWT_SECRET: hopper-dev-secret-key-at-least-32-bytes-long-for-hmac-sha256
           GITHUB_WEBHOOK_SECRET: test-webhook-secret-string
+          GITHUB_APP_WEBHOOK_SECRET: gh_dev_webhook_secret_for_local_testing_at_least_20_chars
+          STRIPE_WEBHOOK_SECRET: whsec_test_mock_secret_key_for_local_testing
           AI_PROVIDER: deterministic
           NODE_ENV: test
 
