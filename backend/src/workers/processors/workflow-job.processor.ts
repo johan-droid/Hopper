@@ -1,30 +1,44 @@
 /**
- * Workflow Job Processor (BullMQ Consumer).
- * Handles asynchronous execution of CI failure diagnosis, secret scrubbing,
- * cloud moat fingerprinting, flakiness tracking, and DB persistence.
- * Delegates core orchestration directly to HopperEngine.
+ * Workflow Job Processor (transport-agnostic consumer core).
+ *
+ * Previously a BullMQ `Job` handler. The business logic is now independent of
+ * any queue library so the same function is executed by:
+ *   - the Vercel Queues push consumer
+ *   - the cron drain (PostgreSQL job store)
+ *   - the local polling worker
+ *
+ * Preserved behaviour: log extraction, secret redaction, failure
+ * fingerprinting, flakiness scoring, AI diagnosis, database persistence,
+ * GitHub PR comments and budget accounting (all inside HopperEngine), plus the
+ * matrix-burst diagnosis lock.
  */
 
-import { Job, DelayedError } from 'bullmq';
 import { WorkflowJobEventData, JobDiagnosticResult } from '../../queue/types.js';
 import { HopperEngine, CanonicalCIEvent, HopperEngineDependencies } from '../../engine/index.js';
 import { sliceFailedStepLog } from '../../lib/parser/log-slicer.js';
 import { computeFailureSignature } from '../../lib/parser/fingerprinter.js';
-import { acquireDiagnosisLock, releaseDiagnosisLock, DiagnosisLock } from '../../queue/redis.js';
+import { acquireDiagnosisLock, releaseDiagnosisLock, DiagnosisLock } from '../../queue/coordination.js';
 import { RepositoryRepository } from '../../db/repositories/repository.repository.js';
 
 export interface ProcessorDependencies extends HopperEngineDependencies {}
 
+export interface ProcessorContext {
+  /** Durable job row id, used for correlation in logs. */
+  jobId?: string;
+}
+
 export async function processWorkflowJob(
   jobData: WorkflowJobEventData,
   deps: ProcessorDependencies = {},
-  job?: Job<WorkflowJobEventData>
+  context: ProcessorContext = {}
 ): Promise<JobDiagnosticResult> {
   const engine = new HopperEngine(deps);
 
-  // Matrix Burst Lock: Prevent parallel matrix failures with same fingerprint from calling LLM simultaneously
+  // Matrix Burst Lock: prevent parallel matrix failures sharing one fingerprint
+  // from calling the LLM simultaneously. Contention is *deferred*, not failed.
   let diagnosisLock: DiagnosisLock | null = null;
-  if (job && jobData.conclusion === 'failure') {
+
+  if (jobData.conclusion === 'failure') {
     const rawLog = jobData.rawLog || '';
     const sliced = sliceFailedStepLog(rawLog);
     const signatureObj = computeFailureSignature(
@@ -33,6 +47,7 @@ export async function processWorkflowJob(
       sliced.detectedTestIdentifier,
       sliced.cleanedSnippet
     );
+
     const repoRepo = deps.repoRepo || new RepositoryRepository(deps.executor);
     let repoId = `repo-${jobData.githubRepoId}`;
     try {
@@ -41,19 +56,23 @@ export async function processWorkflowJob(
         if (repo?.id) repoId = repo.id;
       }
     } catch {
-      // In tests/offline fallback
+      // Offline / mocked executor fallback
     }
 
     diagnosisLock = await acquireDiagnosisLock(repoId, signatureObj.signatureHash);
     if (!diagnosisLock.acquired) {
-      await job.moveToDelayed(Date.now() + 5000, job.token);
-      throw new DelayedError();
+      return {
+        status: 'deferred',
+        reason: 'Another matrix job is diagnosing an identical failure signature',
+      };
     }
   }
 
   try {
     const canonicalEvent: CanonicalCIEvent = {
-      eventId: job?.id ? String(job.id) : `job-${jobData.githubJobId}-${jobData.githubRunAttempt}`,
+      eventId:
+        context.jobId ||
+        `job-${jobData.githubJobId}-${jobData.githubRunAttempt}`,
       source: 'github',
       installationId: jobData.installationId,
       orgLogin: jobData.orgLogin,
@@ -83,7 +102,7 @@ export async function processWorkflowJob(
     });
 
     return {
-      status: result.status as any,
+      status: result.status as JobDiagnosticResult['status'],
       signatureHash: result.signatureHash,
       flakinessScore: result.flakinessScore,
       failureId: result.failureId,
@@ -96,11 +115,4 @@ export async function processWorkflowJob(
       await releaseDiagnosisLock(diagnosisLock.key, diagnosisLock.token);
     }
   }
-}
-
-/**
- * BullMQ Worker Handler adapter.
- */
-export async function handleWorkflowJob(job: Job<WorkflowJobEventData>): Promise<JobDiagnosticResult> {
-  return processWorkflowJob(job.data, {}, job);
 }

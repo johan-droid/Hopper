@@ -3,13 +3,18 @@
  * Routes real-time notifications to team Slack webhooks when CI jobs fail
  * with high flakiness scores.
  */
-import { Job } from 'bullmq';
 import { WorkflowJobEventData } from '../../queue/types.js';
 import { DatabaseExecutor } from '../../db/client.js';
 import { ErrorCategory } from '../../db/types.js';
 import { OrganizationRepository } from '../../db/repositories/organization.repository.js';
 import { FailureSignatureRepository } from '../../db/repositories/failure-signature.repository.js';
 import { WorkflowFailureRepository } from '../../db/repositories/workflow-failure.repository.js';
+
+/** Minimal structural job shape (queue-library agnostic). */
+interface Job<T> {
+  id?: string;
+  data: T;
+}
 
 export interface SlackAlertProcessorDependencies {
   executor?: DatabaseExecutor;

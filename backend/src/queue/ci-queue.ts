@@ -1,70 +1,64 @@
 /**
- * BullMQ CI Events Queue Producer.
- * Enqueues GitHub Action failure and success events for background processing.
+ * CI Events Queue Producer.
+ *
+ * Replaces the BullMQ producer. Enqueueing is a two-step, loss-proof operation:
+ *   1. Durably insert the job into PostgreSQL (idempotent on the GitHub job key).
+ *   2. Best-effort publish to Vercel Queues for immediate push delivery.
+ *
+ * Because step 1 is the durable record, a webhook is only acknowledged once the
+ * job is safely persisted — even if the queue publish failed and the cron drain
+ * will have to pick it up.
  */
 
-import { Queue, QueueOptions } from 'bullmq';
-import { getRedisUrl, getRedisClient } from './redis.js';
-import { WorkflowJobEventData } from './types.js';
+import { getJobStore, buildQueueMessage } from './job-store.js';
+import { publishQueueMessage, PublishResult } from './transport.js';
+import {
+  CI_EVENTS_QUEUE_NAME,
+  WorkflowJobEventData,
+  QueueMessage,
+  buildWorkflowJobIdempotencyKey,
+} from './types.js';
 
-export const CI_EVENTS_QUEUE_NAME = 'ci-events';
+export { CI_EVENTS_QUEUE_NAME };
 
-let activeQueue: Queue<WorkflowJobEventData> | null = null;
-let customQueue: any = null;
-
-export function setCustomQueue(queue: any): void {
-  customQueue = queue;
-}
-
-export function createCiQueue(): Queue<WorkflowJobEventData> {
-  const connection = getRedisClient();
-  const queueOptions: QueueOptions = {
-    connection,
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: {
-        type: 'exponential',
-        delay: 1000,
-      },
-      removeOnComplete: 100,
-      removeOnFail: 500,
-    },
-  };
-
-  return new Queue<WorkflowJobEventData>(CI_EVENTS_QUEUE_NAME, queueOptions);
-}
-
-export function getCiQueue(): Queue<WorkflowJobEventData> {
-  if (customQueue) {
-    return customQueue;
-  }
-  if (!activeQueue) {
-    activeQueue = createCiQueue();
-  }
-  return activeQueue;
+export interface EnqueueWorkflowJobResult {
+  jobId: string;
+  idempotencyKey: string;
+  duplicate: boolean;
+  transport: PublishResult;
 }
 
 /**
  * Enqueue a GitHub Action job event for asynchronous diagnosis.
- * Uses a deterministic job ID (github_job_id + attempt) for deduplication.
+ * The deterministic idempotency key prevents duplicate processing of a
+ * redelivered webhook or a matrix re-run of the same attempt.
  */
 export async function enqueueWorkflowJob(
   event: WorkflowJobEventData
-): Promise<{ jobId: string }> {
-  const queue = getCiQueue();
-  const deterministicJobId = `job:${event.githubJobId}:${event.githubRunAttempt}`;
+): Promise<EnqueueWorkflowJobResult> {
+  const store = getJobStore();
+  const idempotencyKey = buildWorkflowJobIdempotencyKey(event);
 
-  const job = await queue.add('process-workflow-job', event, {
-    jobId: deterministicJobId,
+  const { id, duplicate } = await store.enqueue({
+    payload: event,
+    idempotencyKey,
+    queueName: CI_EVENTS_QUEUE_NAME,
   });
 
-  return { jobId: job.id || deterministicJobId };
+  const message: QueueMessage = {
+    ...buildQueueMessage(event, idempotencyKey),
+    jobId: id,
+  };
+
+  const transport = await publishQueueMessage(message);
+
+  return { jobId: id, idempotencyKey, duplicate, transport };
 }
 
+/**
+ * No persistent queue connection is held by the producer, so shutdown is a
+ * no-op. Retained for call-site compatibility with the previous BullMQ API.
+ */
 export async function closeCiQueue(): Promise<void> {
-  if (activeQueue) {
-    await activeQueue.close();
-    activeQueue = null;
-  }
-  customQueue = null;
+  return;
 }

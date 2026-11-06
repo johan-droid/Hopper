@@ -8,7 +8,7 @@
     "hopper": "./bin/hopper.js"
   },
   "scripts": {
-    "dev": "NODE_ENV=development GITHUB_APP_ID=1029384 GITHUB_APP_CLIENT_ID=Ov23li5VvuBPsGAbWwif GITHUB_APP_CLIENT_SECRET=e2a351cf30ecf5ce0601914c8a637c8beeab92b8 GITHUB_APP_WEBHOOK_SECRET=1134874a3a8022692bb2cdeca059112e3b263a0f1e2fa62390907375ee2e2020 GITHUB_APP_PRIVATE_KEY=placeholder-private-key-for-development DATABASE_URL=postgresql://postgres:postgres@localhost:5432/hopper_db REDIS_URL=redis://localhost:6379 STRIPE_SECRET_KEY=sk_test_placeholder STRIPE_WEBHOOK_SECRET=whsec_test_placeholder STRIPE_PRICE_ID_PRO_DEV_9=price_pro_dev_9 STRIPE_PRICE_ID_TEAM_29=price_team_29 AUTO_RETRY_POLICY_ENABLED=false DISCORD_WEBHOOK_URL= tsx watch src/server/index.ts",
+    "dev": "tsx watch src/server/index.ts",
     "build": "tsup --config tsup.config.json",
     "lint": "tsc --noEmit",
     "test": "vitest run --no-cache",
@@ -33,12 +33,11 @@
   "author": "Hopper Engineering",
   "license": "Apache-2.0",
   "dependencies": {
-    "bullmq": "^6.5.4",
+    "@vercel/queue": "^0.8.0",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
-    "ioredis": "^5.4.1",
     "pg": "^8.13.1",
     "zod": "^3.23.8"
   },
@@ -46,6 +45,7 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.8.7",
     "@types/pg": "^8.11.10",
+    "@vercel/node": "^5.1.0",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",

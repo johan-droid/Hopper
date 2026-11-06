@@ -1,5 +1,10 @@
 {
-  "entry": ["src/cli/hopper.ts", "src/server/index.ts", "src/index.ts"],
+  "entry": [
+    "src/cli/hopper.ts",
+    "src/server/index.ts",
+    "src/workers/worker-entry.ts",
+    "src/index.ts"
+  ],
   "format": ["esm"],
   "dts": true,
   "clean": false,
