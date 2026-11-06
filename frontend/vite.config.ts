@@ -15,7 +15,9 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    // Source maps stay out of the public deployment: they would publish the
+    // full application source at the CDN origin.
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks: {
