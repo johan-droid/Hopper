@@ -14,6 +14,9 @@ export interface Env {
   ENVIRONMENT: string;
   CLOUDFLARE_TURNSTILE_SECRET_KEY?: string;
   ENABLE_EDGE_CACHE?: string;
+  AI?: any;
+  AI_MODEL?: string;
+  EMBEDDING_MODEL?: string;
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -71,6 +74,9 @@ export default {
             gatewayInfo: '/',
             health: '/api/health',
             diagnoseSandbox: '/api/diagnose/sandbox',
+            workersAiModels: '/api/ai/models',
+            workersAiDiagnose: '/api/ai/diagnose',
+            workersAiEmbeddings: '/api/ai/embeddings',
             signatures: '/api/signatures',
             webhooks: '/api/webhooks/github',
           },
@@ -85,6 +91,197 @@ export default {
           },
         }
       );
+    }
+
+    // 2.2 Cloudflare Workers AI Model Discovery Endpoint
+    if (url.pathname === '/api/ai/models' && request.method === 'GET') {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          provider: 'cloudflare-workers-ai',
+          freeTier: true,
+          dailyFreeNeurons: 10000,
+          activeModel: env.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct',
+          activeEmbeddingModel: env.EMBEDDING_MODEL || '@cf/baai/bge-base-en-v1.5',
+          supportedModels: [
+            '@cf/meta/llama-3.1-8b-instruct',
+            '@cf/meta/llama-3-8b-instruct',
+            '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
+            '@cf/mistral/mistral-7b-instruct-v0.2',
+          ],
+          aiBindingAvailable: Boolean(env.AI),
+          edgeColo,
+        }, null, 2),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...CORS_HEADERS,
+            ...SECURITY_HEADERS,
+            'X-Edge-Colo': edgeColo,
+          },
+        }
+      );
+    }
+
+    // 2.3 Cloudflare Workers AI Edge Diagnosis Endpoint
+    if (url.pathname === '/api/ai/diagnose' && request.method === 'POST') {
+      try {
+        const body: any = await request.json().catch(() => ({}));
+        const model = body.model || env.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct';
+        const messages = body.messages || [
+          {
+            role: 'system',
+            content: 'You are Hopper, an expert CI/CD failure intelligence engine. Respond with strictly valid JSON only.'
+          },
+          {
+            role: 'user',
+            content: typeof body.prompt === 'string' ? body.prompt : JSON.stringify(body.context || {})
+          }
+        ];
+
+        if (env.AI && typeof env.AI.run === 'function') {
+          const aiResult = await env.AI.run(model, {
+            messages,
+            max_tokens: 1024,
+            temperature: 0.1,
+          });
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              provider: 'cloudflare-workers-ai',
+              model,
+              result: aiResult,
+              edgeColo,
+              latencyMs: Math.round((performance.now() - startTime) * 10) / 10,
+            }, null, 2),
+            {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                ...CORS_HEADERS,
+                ...SECURITY_HEADERS,
+                'X-Edge-Colo': edgeColo,
+              },
+            }
+          );
+        } else {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              provider: 'cloudflare-workers-ai-simulated',
+              model,
+              result: {
+                response: JSON.stringify({
+                  error_category: 'build_compile',
+                  summary: 'Simulated Cloudflare Workers AI edge diagnosis.',
+                  root_cause_clues: 'Edge AI execution simulated in development mode.',
+                  confidence: { level: 'high', score: 90, reasoning: 'Workers AI binding stub' },
+                  relevant_log_lines: ['[Simulated log snippet]'],
+                  suggested_next_check: 'Check Cloudflare dashboard for deployed Workers AI status.',
+                  verification_steps: ['Deploy worker with wrangler deploy'],
+                  local_repro_command: 'npm run test',
+                }),
+              },
+              edgeColo,
+            }, null, 2),
+            {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                ...CORS_HEADERS,
+                ...SECURITY_HEADERS,
+                'X-Edge-Colo': edgeColo,
+              },
+            }
+          );
+        }
+      } catch (err: any) {
+        return new Response(
+          JSON.stringify({
+            error: 'WORKERS_AI_EXECUTION_ERROR',
+            message: err.message,
+            edgeColo,
+          }),
+          {
+            status: 500,
+            headers: {
+              'Content-Type': 'application/json',
+              ...CORS_HEADERS,
+              ...SECURITY_HEADERS,
+              'X-Edge-Colo': edgeColo,
+            },
+          }
+        );
+      }
+    }
+
+    // 2.4 Cloudflare Workers AI Edge Embeddings Endpoint
+    if (url.pathname === '/api/ai/embeddings' && request.method === 'POST') {
+      try {
+        const body: any = await request.json().catch(() => ({}));
+        const model = body.model || env.EMBEDDING_MODEL || '@cf/baai/bge-base-en-v1.5';
+        const textArray = Array.isArray(body.text) ? body.text : [body.text || ''];
+
+        if (env.AI && typeof env.AI.run === 'function') {
+          const embeddingResult = await env.AI.run(model, { text: textArray });
+          return new Response(
+            JSON.stringify({
+              success: true,
+              provider: 'cloudflare-workers-ai',
+              model,
+              result: embeddingResult,
+              edgeColo,
+            }),
+            {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                ...CORS_HEADERS,
+                ...SECURITY_HEADERS,
+                'X-Edge-Colo': edgeColo,
+              },
+            }
+          );
+        } else {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              provider: 'cloudflare-workers-ai-simulated',
+              model,
+              result: { shape: [1, 768], data: [new Array(768).fill(0.01)] },
+              edgeColo,
+            }),
+            {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                ...CORS_HEADERS,
+                ...SECURITY_HEADERS,
+                'X-Edge-Colo': edgeColo,
+              },
+            }
+          );
+        }
+      } catch (err: any) {
+        return new Response(
+          JSON.stringify({
+            error: 'WORKERS_AI_EMBEDDING_ERROR',
+            message: err.message,
+            edgeColo,
+          }),
+          {
+            status: 500,
+            headers: {
+              'Content-Type': 'application/json',
+              ...CORS_HEADERS,
+              ...SECURITY_HEADERS,
+              'X-Edge-Colo': edgeColo,
+            },
+          }
+        );
+      }
     }
 
     // 3. Optional Cloudflare Turnstile Verification for unauthenticated diagnostic sandbox

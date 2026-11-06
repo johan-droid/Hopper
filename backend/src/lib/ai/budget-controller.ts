@@ -44,6 +44,37 @@ export const PRICING_REGISTRY: Record<string, ModelPricing> = {
     cacheWritePerMillion: 0.15,
     cacheReadPerMillion: 0.075,
   },
+  // Cloudflare Workers AI Models (Free Tier: 10,000 neurons/day)
+  '@cf/meta/llama-3.1-8b-instruct': {
+    inputPerMillion: 0.011,
+    outputPerMillion: 0.011,
+    cacheWritePerMillion: 0.0,
+    cacheReadPerMillion: 0.0,
+  },
+  '@cf/meta/llama-3-8b-instruct': {
+    inputPerMillion: 0.011,
+    outputPerMillion: 0.011,
+    cacheWritePerMillion: 0.0,
+    cacheReadPerMillion: 0.0,
+  },
+  '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b': {
+    inputPerMillion: 0.06,
+    outputPerMillion: 0.06,
+    cacheWritePerMillion: 0.0,
+    cacheReadPerMillion: 0.0,
+  },
+  '@cf/mistral/mistral-7b-instruct-v0.2': {
+    inputPerMillion: 0.011,
+    outputPerMillion: 0.011,
+    cacheWritePerMillion: 0.0,
+    cacheReadPerMillion: 0.0,
+  },
+  '@cf/baai/bge-base-en-v1.5': {
+    inputPerMillion: 0.005,
+    outputPerMillion: 0.005,
+    cacheWritePerMillion: 0.0,
+    cacheReadPerMillion: 0.0,
+  },
 };
 
 export interface ReserveBudgetParams {
@@ -118,7 +149,8 @@ export class AiBudgetController {
     }
 
     const idempotencyKey = params.idempotencyKey || `res_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
-    const reservationAmount = params.provider === 'mock' ? 0.0001 : STANDARD_RESERVATION_USD;
+    const isFreeTierProvider = params.provider === 'mock' || params.provider === 'cloudflare' || params.provider === 'workers-ai';
+    const reservationAmount = isFreeTierProvider ? 0.0001 : STANDARD_RESERVATION_USD;
 
     return this.executeTx(async (tx) => {
       // 1. Lock active monthly ledger row exclusively
@@ -259,6 +291,9 @@ export class AiBudgetController {
       let actualCost = 0;
       if (reservation.provider === 'mock') {
         actualCost = 0.00001;
+      } else if (reservation.provider === 'cloudflare' || reservation.provider === 'workers-ai') {
+        // Cloudflare Workers AI free tier: $0.0000 (10,000 neurons/day included)
+        actualCost = 0.0000;
       } else {
         const inputCost = (inputTokens / 1_000_000) * pricing.inputPerMillion;
         const outputCost = (outputTokens / 1_000_000) * pricing.outputPerMillion;

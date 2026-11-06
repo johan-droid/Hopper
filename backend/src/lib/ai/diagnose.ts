@@ -46,7 +46,7 @@ export const ConfidenceAssessmentSchema = z.object({
 });
 
 export const DiagnosisTelemetrySchema = z.object({
-  provider: z.enum(['anthropic', 'openai', 'deterministic']),
+  provider: z.enum(['anthropic', 'openai', 'cloudflare', 'deterministic']),
   model: z.string(),
   latencyMs: z.number(),
   promptTokens: z.number(),
@@ -527,6 +527,210 @@ export async function callOpenAiLlm(
   const output = DiagnosisOutputSchema.parse(parsedJson);
   output.telemetry = {
     provider: 'openai',
+    model,
+    latencyMs,
+    promptTokens,
+    completionTokens,
+    costUsd,
+    isFallback: false,
+  };
+
+  return output;
+}
+
+/**
+ * Safely extracts and parses JSON from AI model completions,
+ * automatically handling markdown code fences (```json ... ```).
+ */
+export function extractAndParseJson(raw: string): any {
+  if (!raw || typeof raw !== 'string') {
+    throw new Error('Empty or non-string response received from AI model');
+  }
+
+  let cleaned = raw.trim();
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+  }
+  return JSON.parse(cleaned.trim());
+}
+
+/**
+ * Calls Cloudflare Workers AI API with overall deadline, bounded backoff retry,
+ * Retry-After header enforcement, structured JSON output, and zero-cost free-tier telemetry.
+ *
+ * Supports:
+ * 1. Direct Cloudflare Workers AI REST API: https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/run/{model}
+ * 2. Cloudflare Worker Gateway AI Route: {workerAiUrl}/api/ai/diagnose
+ */
+export async function callCloudflareLlm(
+  params: DiagnosisContext,
+  credentials?: { accountId?: string; apiToken?: string; workerAiUrl?: string },
+  timeoutMs = 15000,
+  retryConfig?: RetryPolicyConfig
+): Promise<DiagnosisOutput> {
+  const model = process.env.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct';
+  const start = performance.now();
+  const overallStartTime = Date.now();
+
+  const accountId = credentials?.accountId || process.env.CLOUDFLARE_ACCOUNT_ID;
+  const apiToken = credentials?.apiToken || process.env.CLOUDFLARE_API_TOKEN || process.env.AI_API_KEY;
+  const workerAiUrl = credentials?.workerAiUrl || process.env.CLOUDFLARE_WORKER_AI_URL;
+
+  if (!workerAiUrl && (!accountId || !apiToken)) {
+    throw new Error(
+      'Cloudflare Workers AI configuration incomplete: either CLOUDFLARE_WORKER_AI_URL or both CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be provided.'
+    );
+  }
+
+  const endpoint = workerAiUrl
+    ? (workerAiUrl.endsWith('/api/ai/diagnose') ? workerAiUrl : `${workerAiUrl.replace(/\/+$/, '')}/api/ai/diagnose`)
+    : `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
+
+  const maxRetries = retryConfig?.maxRetries ?? 2;
+  const initialDelayMs = retryConfig?.initialDelayMs ?? (
+    process.env.AI_RETRY_INITIAL_DELAY_MS
+      ? parseInt(process.env.AI_RETRY_INITIAL_DELAY_MS, 10)
+      : (process.env.NODE_ENV === 'test' ? 25 : 500)
+  );
+  const maxDelayMs = retryConfig?.maxDelayMs ?? 10000;
+  const overallDeadlineMs = retryConfig?.overallDeadlineMs ?? timeoutMs;
+
+  let response: Response | null = null;
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const timeSpent = Date.now() - overallStartTime;
+    const remainingDeadline = overallDeadlineMs - timeSpent;
+    if (remainingDeadline <= 50) {
+      throw new Error(`Overall AI request deadline of ${overallDeadlineMs}ms exceeded before attempt ${attempt + 1}`);
+    }
+
+    const attemptTimeout = Math.min(remainingDeadline, 10000);
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (apiToken) {
+      headers['Authorization'] = `Bearer ${apiToken}`;
+    }
+
+    const requestBody = workerAiUrl
+      ? JSON.stringify({
+          model,
+          context: params,
+          messages: [
+            { role: 'system', content: buildDiagnosisSystemPrompt() },
+            { role: 'user', content: buildDiagnosisUserPrompt(params) },
+          ],
+        })
+      : JSON.stringify({
+          messages: [
+            { role: 'system', content: buildDiagnosisSystemPrompt() },
+            { role: 'user', content: buildDiagnosisUserPrompt(params) },
+          ],
+          max_tokens: 1024,
+          temperature: 0.1,
+        });
+
+    try {
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: requestBody,
+        signal: AbortSignal.timeout(attemptTimeout),
+      });
+
+      // 1. Successful response
+      if (response.ok) {
+        break;
+      }
+
+      // 2. Permanent authentication or client error: 400, 401, 403, 404, 422 -> DO NOT RETRY
+      if (isPermanentHttpError(response.status)) {
+        const errText = await response.text();
+        throw new Error(`Cloudflare Workers AI permanent authentication/client error (${response.status}): ${errText}`);
+      }
+
+      // 3. Transient error: 429 Rate Limit or 5xx Server Error -> Bounded Retry with Backoff
+      if (response.status === 429 || response.status >= 500) {
+        if (attempt >= maxRetries) {
+          const errText = await response.text();
+          throw new Error(`Cloudflare Workers AI rate-limit/server error (${response.status}) persisted after ${maxRetries} retries: ${errText}`);
+        }
+
+        const retryAfterHeader = response.headers.get('retry-after');
+        const retryAfterMs = parseRetryAfterHeader(retryAfterHeader);
+        const baseDelay = initialDelayMs * Math.pow(2, attempt);
+        const jitter = Math.random() * (initialDelayMs * 0.2);
+        let delayMs = baseDelay + jitter;
+        if (retryAfterMs !== null && retryAfterMs > 0) {
+          delayMs = Math.max(delayMs, retryAfterMs);
+        }
+        delayMs = Math.min(delayMs, maxDelayMs);
+
+        const currentRemaining = overallDeadlineMs - (Date.now() - overallStartTime);
+        if (delayMs >= currentRemaining) {
+          throw new Error(`Overall AI request deadline of ${overallDeadlineMs}ms would be exceeded by backoff delay (${Math.round(delayMs)}ms)`);
+        }
+
+        await new Promise((r) => setTimeout(r, delayMs));
+        continue;
+      }
+
+      // Any other unexpected status: do not retry
+      const errText = await response.text();
+      throw new Error(`Cloudflare Workers AI returned unhandled status ${response.status}: ${errText}`);
+    } catch (err: any) {
+      lastError = err;
+      if (err.message && err.message.includes('permanent authentication/client error')) {
+        throw err;
+      }
+      if (Date.now() - overallStartTime >= overallDeadlineMs) {
+        throw new Error(`Overall AI request deadline of ${overallDeadlineMs}ms exceeded: ${err.message}`);
+      }
+      if (attempt >= maxRetries) {
+        break;
+      }
+      const currentRemaining = overallDeadlineMs - (Date.now() - overallStartTime);
+      const networkDelay = Math.min(initialDelayMs * Math.pow(2, attempt), 2000);
+      if (networkDelay >= currentRemaining) {
+        throw err;
+      }
+      await new Promise((r) => setTimeout(r, networkDelay));
+    }
+  }
+
+  if (!response || !response.ok) {
+    throw lastError || new Error('Cloudflare Workers AI request failed after retries');
+  }
+
+  const data = (await response.json()) as any;
+  let rawText = '';
+  if (data.result && typeof data.result.response === 'string') {
+    rawText = data.result.response;
+  } else if (typeof data.response === 'string') {
+    rawText = data.response;
+  } else if (typeof data.result === 'string') {
+    rawText = data.result;
+  } else if (data.choices?.[0]?.message?.content) {
+    rawText = data.choices[0].message.content;
+  } else {
+    rawText = JSON.stringify(data.result || data);
+  }
+
+  const parsedJson = extractAndParseJson(rawText);
+
+  const latencyMs = Math.round((performance.now() - start) * 10) / 10;
+  const promptTokens = Math.round((params.slicedLogSnippet.length + 800) / 4);
+  const completionTokens = Math.round(rawText.length / 4);
+  // Free Tier: 10,000 neurons/day included ($0.00 cost)
+  const costUsd = 0.0000;
+
+  const output = DiagnosisOutputSchema.parse(parsedJson);
+  output.telemetry = {
+    provider: 'cloudflare',
     model,
     latencyMs,
     promptTokens,
@@ -1026,9 +1230,73 @@ export async function synthesizeDiagnosis(
     }
   }
 
+  // Single Provider: Cloudflare Workers AI (Free Tier: 10,000 neurons/day)
+  if (configuredProvider === 'cloudflare' || configuredProvider === 'workers-ai') {
+    const hasConfig =
+      process.env.CLOUDFLARE_WORKER_AI_URL ||
+      (process.env.CLOUDFLARE_ACCOUNT_ID && (process.env.CLOUDFLARE_API_TOKEN || process.env.AI_API_KEY));
+
+    if (hasConfig) {
+      const budgetController = new AiBudgetController();
+      const model = process.env.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct';
+
+      let reservation: any;
+      try {
+        reservation = await budgetController.reserveBudget({
+          provider: 'cloudflare',
+          model,
+        });
+      } catch (err: any) {
+        console.warn(`[AI] Budget controller pre-flight failed closed: ${err.message}`);
+        return synthesizeDeterministicDiagnosis(params, `Budget controller unavailable: ${err.message}`);
+      }
+
+      if (!reservation.allowed) {
+        console.warn(`[AI] Budget cap enforced: ${reservation.rejectionReason}`);
+        return synthesizeDeterministicDiagnosis(params, `Monthly budget limit reached: ${reservation.rejectionReason}`);
+      }
+
+      try {
+        await budgetController.markSubmitted(reservation.reservationId);
+        const result = await callCloudflareLlm(params, undefined, options?.timeoutMs, options?.retryConfig);
+
+        await budgetController.settleReservation({
+          reservationId: reservation.reservationId,
+          promptTokens: result.telemetry?.promptTokens ?? 2000,
+          completionTokens: result.telemetry?.completionTokens ?? 400,
+          latencyMs: result.telemetry?.latencyMs,
+        });
+
+        return result;
+      } catch (err: any) {
+        const isTimeout =
+          err.name === 'AbortError' ||
+          (err.message && (err.message.toLowerCase().includes('deadline') || err.message.toLowerCase().includes('timeout')));
+
+        try {
+          if (isTimeout) {
+            await budgetController.markUsageUnknown(reservation.reservationId, `Timeout: ${err.message}`);
+          } else {
+            await budgetController.markFailedZero(reservation.reservationId, err.message);
+          }
+        } catch {
+          // Ignore secondary budget recording errors
+        }
+
+        console.warn(`[AI] Cloudflare Workers AI provider failed: ${err.message}. Falling back to deterministic analysis.`);
+        return synthesizeDeterministicDiagnosis(params, `Cloudflare Workers AI provider error: ${err.message}`);
+      }
+    } else {
+      return synthesizeDeterministicDiagnosis(
+        params,
+        'No valid CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN or CLOUDFLARE_WORKER_AI_URL configured for single provider "cloudflare"'
+      );
+    }
+  }
+
   return synthesizeDeterministicDiagnosis(
     params,
-    `Unsupported AI provider: "${configuredProvider}". Expected "anthropic" or "openai".`
+    `Unsupported AI provider: "${configuredProvider}". Expected "anthropic", "openai", or "cloudflare".`
   );
 }
 
