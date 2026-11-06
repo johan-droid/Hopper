@@ -10,3 +10,9 @@ dist/
 id_rsa
 id_ed25519
 .system_generated/
+.env.backup
+.env.*.bak
+.env.local
+.vercel/
+.env*.bak
+*.key
