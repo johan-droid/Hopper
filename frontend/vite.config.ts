@@ -13,6 +13,12 @@ export default defineConfig({
       },
     },
   },
+  // Unit tests live in src/; e2e/*.spec.ts belongs to Playwright and must never
+  // be collected by Vitest.
+  test: {
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
+  },
   build: {
     outDir: 'dist',
     // Source maps stay out of the public deployment: they would publish the
