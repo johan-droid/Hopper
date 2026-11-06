@@ -1,0 +1,64 @@
+# Dependabot Configuration for Hopper
+# Documentation: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # 1. GitHub Actions Workflows & Composite Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "johan-droid"
+
+  # 2. Root Workspace Node.js Dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "johan-droid"
+
+  # 3. Backend Node.js & TypeScript Dependencies
+  - package-ecosystem: "npm"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    commit-message:
+      prefix: "chore(deps-backend)"
+      include: "scope"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "johan-droid"
+
+  # 4. Frontend React 18 & Vite Dependencies
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Kolkata"
+    commit-message:
+      prefix: "chore(deps-frontend)"
+      include: "scope"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "johan-droid"

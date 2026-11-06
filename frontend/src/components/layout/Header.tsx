@@ -1,10 +1,17 @@
 import React from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { useHealthQuery } from '../../api/hooks';
-import { Zap, Activity } from 'lucide-react';
+import { Zap, Activity, LogOut, LogIn } from 'lucide-react';
 
 export const Header: React.FC = () => {
-  const { selectedOrg, setSelectedOrg, simulatedPlan, setSimulatedPlan } = useAppStore();
+  const {
+    selectedOrg,
+    setSelectedOrg,
+    setTab,
+    supabaseUser,
+    signOut,
+    setAuthModalOpen,
+  } = useAppStore();
   const { data: health, isLoading } = useHealthQuery();
 
   const isHealthy = health?.status === 'healthy';
@@ -13,17 +20,32 @@ export const Header: React.FC = () => {
     <header className="flex items-center justify-between px-6 py-3 border-b border-white/10 bg-[#0f1523]/80 backdrop-blur-md sticky top-0 z-50">
       {/* Brand */}
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-          <Zap className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold text-base tracking-wider text-white">HOPPER</span>
-            <span className="text-[10px] font-mono tracking-widest text-cyan-400 bg-cyan-950/80 border border-cyan-800/50 px-1.5 py-0.5 rounded">
-              CI/CD INTELLIGENCE
-            </span>
+        <button
+          onClick={() => setTab('landing')}
+          className="flex items-center gap-3 group text-left cursor-pointer"
+          title="Return to Hopper Landing Page"
+        >
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition-transform">
+            <Zap className="w-5 h-5 text-white" />
           </div>
-        </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-base tracking-wider text-white group-hover:text-cyan-300 transition-colors">
+                HOPPER
+              </span>
+              <span className="text-[10px] font-mono tracking-widest text-cyan-400 bg-cyan-950/80 border border-cyan-800/50 px-1.5 py-0.5 rounded">
+                CI/CD INTELLIGENCE
+              </span>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => setTab('landing')}
+          className="ml-2 text-xs font-mono text-slate-400 hover:text-cyan-400 border border-white/10 hover:border-cyan-500/30 px-2 py-0.5 rounded transition-colors cursor-pointer"
+        >
+          ← Landing Page
+        </button>
       </div>
 
       {/* Controls */}
@@ -56,33 +78,43 @@ export const Header: React.FC = () => {
           </select>
         </div>
 
-        {/* Current Plan Badge */}
-        <div
-          className={`px-3 py-1 rounded-md text-xs font-mono border ${
-            simulatedPlan === 'free'
-              ? 'bg-amber-950/30 text-amber-400 border-amber-800/40'
-              : simulatedPlan === 'pro_dev'
-              ? 'bg-blue-950/30 text-blue-400 border-blue-800/40'
-              : 'bg-emerald-950/30 text-emerald-400 border-emerald-800/40'
-          }`}
-        >
-          {simulatedPlan === 'free'
-            ? 'FREE TIER (30 RUNS)'
-            : simulatedPlan === 'pro_dev'
-            ? 'PRO DEV (250 RUNS)'
-            : 'TEAM (1000 RUNS)'}
+        {/* Validation Tier Badge */}
+        <div className="px-3 py-1 rounded-md text-xs font-mono bg-cyan-950/40 text-cyan-300 border border-cyan-800/40 flex items-center gap-1.5 font-bold">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+          <span>PREVIEW: UNRESTRICTED</span>
         </div>
 
-        {/* Pro Mode Simulation Toggle */}
-        <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer ml-1 select-none">
-          <input
-            type="checkbox"
-            checked={simulatedPlan !== 'free'}
-            onChange={(e) => setSimulatedPlan(e.target.checked ? 'pro_dev' : 'free')}
-            className="accent-cyan-500 rounded cursor-pointer"
-          />
-          <span>Simulate Pro Mode</span>
-        </label>
+        {/* User Auth Profile / Login */}
+        <div className="ml-2 pl-3 border-l border-white/10 flex items-center">
+          {supabaseUser ? (
+            <div className="flex items-center gap-2">
+              <div
+                className="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700 px-2.5 py-1 rounded-md text-xs font-mono text-slate-200"
+                title={`Signed in as ${supabaseUser.email || supabaseUser.id}`}
+              >
+                <div className="w-4 h-4 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center text-[10px] font-bold">
+                  {supabaseUser.email ? supabaseUser.email[0].toUpperCase() : 'U'}
+                </div>
+                <span className="max-w-[120px] truncate">{supabaseUser.email || 'User'}</span>
+              </div>
+              <button
+                onClick={() => signOut()}
+                className="text-slate-400 hover:text-rose-400 p-1.5 rounded hover:bg-white/5 transition-colors cursor-pointer"
+                title="Sign out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAuthModalOpen(true)}
+              className="flex items-center gap-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-3 py-1 rounded-md text-xs font-mono font-medium shadow-sm transition-all cursor-pointer"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Sign In</span>
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );

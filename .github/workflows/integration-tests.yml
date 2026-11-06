@@ -1,0 +1,78 @@
+name: Integration Tests & Tenant Isolation Quality Gate
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration-suites:
+    name: Full Integration, RLS Isolation & E2E Suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: hopper_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Apply Database Migrations (Including Unprivileged Role & RLS)
+        run: |
+          export PGPASSWORD=postgrespassword
+          for file in $(ls -v backend/supabase/migrations/*.sql); do
+            echo "Applying migration: $file"
+            psql -h localhost -p 5432 -U postgres -d hopper_db -f "$file"
+          done
+        env:
+          PGPASSWORD: postgrespassword
+
+      - name: Run Complete Backend Integration Test Suite
+        run: npm run test:backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/hopper_db
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-super-secret-jwt-key-minimum-32-chars-long
+          GITHUB_WEBHOOK_SECRET: test-webhook-secret-string
+          AI_PROVIDER: deterministic
+          NODE_ENV: test
+
+      - name: Run AI 50-Case Ground-Truth Benchmark
+        run: npx tsx backend/src/lib/ai/evaluation/run-baseline.ts
+        env:
+          DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/hopper_db
+          AI_PROVIDER: deterministic

@@ -1,0 +1,109 @@
+name: Deploy Production (Protected)
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        description: "Workflow run ID of the verified staging artifact (leave blank for latest on main)"
+        required: false
+        type: string
+      confirmation:
+        description: "Type 'PROCEED_PRODUCTION_DEPLOY' to authorize rollout"
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate-authorization:
+    name: Validate Production Release Authorization
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Explicit Human Confirmation
+        run: |
+          if [ "${{ inputs.confirmation }}" != "PROCEED_PRODUCTION_DEPLOY" ]; then
+            echo "ERROR: Production deployment rejected. Confirmation text mismatch."
+            exit 1
+          fi
+          echo "✔ Human authorization confirmed."
+
+  build-production-artifact:
+    name: Prepare Production Release Package
+    needs: validate-authorization
+    uses: ./.github/workflows/build-artifacts.yml
+
+  deploy-to-production:
+    name: Deploy to Cloudflare Production
+    needs: [validate-authorization, build-production-artifact]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://app.hopper.dev
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+
+      - name: Download Verified Immutable Artifact
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: ${{ needs.build-production-artifact.outputs.artifact-name }}
+          path: production-artifact
+
+      - name: Verify Cryptographic Checksum Integrity
+        run: |
+          echo "Verifying production artifact checksum..."
+          cd production-artifact/release-dist
+          sha256sum -c ../RELEASE_CHECKSUMS.sha256
+          echo "✔ Artifact cryptographically verified against staging build."
+
+      - name: Deploy Frontend to Cloudflare Pages Production
+        run: |
+          if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "Deploying verified frontend artifact to Cloudflare Pages (production)..."
+            npx wrangler pages deploy production-artifact/release-dist/frontend \
+              --project-name="hopper-frontend" \
+              --branch="main" \
+              --commit-dirty=true
+          else
+            echo "CLOUDFLARE_API_TOKEN secret not configured; skipping remote Pages push."
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy Edge Gateway Worker to Production
+        run: |
+          if [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "Deploying edge gateway to Cloudflare Workers (production)..."
+            npx wrangler deploy production-artifact/release-dist/deploy/worker.ts \
+              --config production-artifact/release-dist/wrangler.toml \
+              --name hopper-edge
+          else
+            echo "CLOUDFLARE_API_TOKEN secret not configured; skipping remote Worker deploy."
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ORIGIN_API_URL: ${{ secrets.PRODUCTION_ORIGIN_API_URL || 'https://api.hopper.dev' }}
+          CLOUDFLARE_TURNSTILE_SECRET_KEY: ${{ secrets.CLOUDFLARE_TURNSTILE_SECRET_KEY }}
+
+  verify-production:
+    name: Production Post-Deployment Health Verification
+    needs: [build-production-artifact, deploy-to-production]
+    uses: ./.github/workflows/post-deployment-verification.yml
+    with:
+      target-environment: "production"
+      target-app-url: "https://app.hopper.dev"
+      target-api-url: "https://api.hopper.dev"

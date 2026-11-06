@@ -53,12 +53,58 @@ export class OrganizationRepository {
     return res.rows[0] || null;
   }
 
+  async findByWorkspaceId(workspaceId: string): Promise<Organization[]> {
+    const res = await this.db.query<Organization>(
+      'SELECT * FROM organizations WHERE workspace_id = $1 ORDER BY created_at DESC',
+      [workspaceId]
+    );
+    return res.rows;
+  }
+
+  async linkWorkspace(orgId: string, workspaceId: string): Promise<Organization> {
+    const sql = `
+      UPDATE organizations
+      SET workspace_id = $2, updated_at = NOW()
+      WHERE id = $1
+      RETURNING *;
+    `;
+    const res = await this.db.query<Organization>(sql, [orgId, workspaceId]);
+    if (!res.rows[0]) {
+      throw new Error(`Organization with id ${orgId} not found`);
+    }
+
+    // Also update all existing repositories for this organization to link to this workspace
+    await this.db.query(
+      'UPDATE repositories SET workspace_id = $2 WHERE org_id = $1 AND workspace_id IS NULL',
+      [orgId, workspaceId]
+    );
+
+    return res.rows[0];
+  }
+
   async upsert(input: UpsertOrganizationInput): Promise<Organization> {
     const defaultLimit =
       input.monthlyRunLimit ??
       (input.plan === 'team' ? 1000 : input.plan === 'pro_dev' ? 250 : 30);
 
-    const sql = 'INSERT INTO organizations (github_installation_id, github_account_login, github_account_type, plan, monthly_run_limit) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (github_installation_id) DO UPDATE SET github_account_login = EXCLUDED.github_account_login, github_account_type = EXCLUDED.github_account_type, updated_at = NOW() RETURNING *';
+    const sql = `
+      INSERT INTO organizations (
+        github_installation_id,
+        github_account_login,
+        github_account_type,
+        plan,
+        monthly_run_limit,
+        workspace_id
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (github_installation_id)
+      DO UPDATE SET
+        github_account_login = EXCLUDED.github_account_login,
+        github_account_type = EXCLUDED.github_account_type,
+        workspace_id = COALESCE(EXCLUDED.workspace_id, organizations.workspace_id),
+        updated_at = NOW()
+      RETURNING *;
+    `;
 
     const res = await this.db.query<Organization>(sql, [
       input.githubInstallationId,
@@ -66,6 +112,7 @@ export class OrganizationRepository {
       input.githubAccountType,
       input.plan || 'free',
       defaultLimit,
+      input.workspaceId ?? null,
     ]);
 
     return res.rows[0];

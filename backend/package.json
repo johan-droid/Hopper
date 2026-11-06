@@ -18,6 +18,7 @@
     "simulate": "tsx src/cli/hopper.ts simulate",
     "lifecycle": "tsx src/cli/hopper.ts lifecycle",
     "start": "node dist/server/index.js",
+    "worker": "tsx src/workers/worker-entry.ts",
     "test:smoke": "vitest run tests/backend-smoke.test.ts"
   },
   "keywords": [

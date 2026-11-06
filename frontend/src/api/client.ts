@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import {
   HealthSchema,
   HealthData,
@@ -11,6 +12,18 @@ import {
   BillingCheckoutRequest,
   BillingCheckoutResponseSchema,
   BillingCheckoutResponse,
+  Workspace,
+  WorkspaceSchema,
+  WorkspaceMember,
+  WorkspaceMemberSchema,
+  UserProfile,
+  UserProfileSchema,
+  Repository,
+  RepositorySchema,
+  WorkflowFailure,
+  WorkflowFailureSchema,
+  DiagnosisHistoryItem,
+  DiagnosisHistoryItemSchema,
 } from './schema';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -39,6 +52,14 @@ async function request<T>(
     headers.set('Content-Type', 'application/json');
   }
   headers.set('Accept', 'application/json');
+
+  // Propagate authenticated JWT Bearer token if present
+  if (!headers.has('Authorization')) {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('hopper_auth_token') : null;
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+  }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -112,6 +133,107 @@ export const api = {
         body: JSON.stringify(payload),
       },
       BillingCheckoutResponseSchema
+    );
+  },
+
+  listWorkspaces: (): Promise<{ success: boolean; count: number; workspaces: Workspace[] }> => {
+    return request(
+      '/api/workspaces',
+      { method: 'GET' },
+      z.object({
+        success: z.boolean(),
+        count: z.number(),
+        workspaces: z.array(WorkspaceSchema),
+      })
+    );
+  },
+
+  createWorkspace: (payload: { name: string; type?: string; description?: string; isPublic?: boolean }): Promise<{ success: boolean; workspace: Workspace }> => {
+    return request(
+      '/api/workspaces',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+      z.object({
+        success: z.boolean(),
+        workspace: WorkspaceSchema,
+      })
+    );
+  },
+
+  getWorkspaceMembers: (workspaceId: string): Promise<{ success: boolean; count: number; members: WorkspaceMember[] }> => {
+    return request(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/members`,
+      { method: 'GET' },
+      z.object({
+        success: z.boolean(),
+        count: z.number(),
+        members: z.array(WorkspaceMemberSchema),
+      })
+    );
+  },
+
+  getUserProfile: (): Promise<{ success: boolean; profile: UserProfile }> => {
+    return request(
+      '/api/user/profile',
+      { method: 'GET' },
+      z.object({
+        success: z.boolean(),
+        profile: UserProfileSchema,
+      })
+    );
+  },
+
+  listRepositories: (workspaceId?: string): Promise<{ success: boolean; count: number; repositories: Repository[] }> => {
+    const q = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+    return request(
+      `/api/repositories${q}`,
+      { method: 'GET' },
+      z.object({
+        success: z.boolean(),
+        count: z.number(),
+        repositories: z.array(RepositorySchema),
+      })
+    );
+  },
+
+  getRepositoryFailures: (repoId: string): Promise<{ repoId: string; failureCount: number; failures: WorkflowFailure[] }> => {
+    return request(
+      `/api/repositories/${encodeURIComponent(repoId)}/failures`,
+      { method: 'GET' },
+      z.object({
+        repoId: z.string(),
+        failureCount: z.number(),
+        failures: z.array(WorkflowFailureSchema),
+      })
+    );
+  },
+
+  linkRepositoryToWorkspace: (repoId: string, workspaceId: string): Promise<{ success: boolean; repository: Repository }> => {
+    return request(
+      `/api/repositories/${encodeURIComponent(repoId)}/link-workspace`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ workspaceId }),
+      },
+      z.object({
+        success: z.boolean(),
+        repository: RepositorySchema,
+      })
+    );
+  },
+
+  listDiagnosisHistory: (workspaceId?: string): Promise<{ success: boolean; count: number; diagnoses: DiagnosisHistoryItem[] }> => {
+    const q = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+    return request(
+      `/api/diagnose/history${q}`,
+      { method: 'GET' },
+      z.object({
+        success: z.boolean(),
+        count: z.number(),
+        diagnoses: z.array(DiagnosisHistoryItemSchema),
+      })
     );
   },
 };

@@ -4,9 +4,8 @@ import { useSignatureQuery } from '../../api/hooks';
 import { ArrowLeft, Copy, Check, Sparkles, GitBranch, GitPullRequest, Clock } from 'lucide-react';
 
 export const SignatureInspectorView: React.FC = () => {
-  const { setTab } = useAppStore();
-  // Use first signature from local state or default
-  const [signatureId, setSignatureId] = useState<string>('sig_7f8a91c20e14');
+  const { setTab, selectedSignatureId } = useAppStore();
+  const signatureId = selectedSignatureId || 'sig_7f8a91c20e14';
   const { data: signatureData, isLoading } = useSignatureQuery(signatureId);
   const [copied, setCopied] = useState(false);
 
@@ -171,7 +170,7 @@ export const SignatureInspectorView: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-3 text-slate-400">
-                  <span>⏱ {(run.durationMs / 1000).toFixed(1)}s</span>
+                  <span>⏱ {run.durationMs != null ? (run.durationMs / 1000).toFixed(1) : '0.0'}s</span>
                   <span>📅 {run.failedAt}</span>
                   <span
                     className={`px-2 py-0.5 rounded font-bold ${

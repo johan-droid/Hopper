@@ -4,7 +4,7 @@ import { useCheckoutMutation } from '../../api/hooks';
 import { Check, ArrowRight, Sparkles } from 'lucide-react';
 
 export const BillingPlansView: React.FC = () => {
-  const { planTier, selectedOrg } = useAppStore();
+  const { setPlanTier, simulatedPlan, setSimulatedPlan, selectedOrg } = useAppStore();
   const checkoutMutation = useCheckoutMutation();
 
   const handleCheckout = async (plan: 'pro_dev' | 'team') => {

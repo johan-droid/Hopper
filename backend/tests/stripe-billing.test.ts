@@ -217,6 +217,60 @@ describe('Stripe Billing & Quota Lifecycle', () => {
     expect(resetCalled).toBe(true);
   });
 
+  it('handles invoice.payment_failed and returns warning alert', async () => {
+    const mockRepo = {
+      findByStripeCustomerId: async () => ({ id: 'org-failed-pay' }),
+    } as any;
+
+    const event = {
+      type: 'invoice.payment_failed',
+      data: {
+        object: {
+          customer: 'cus_failed_123',
+          last_payment_error: { message: 'Card declined: insufficient funds' },
+        },
+      },
+    };
+
+    const res = await handleStripeWebhookEvent(event, mockRepo);
+    expect(res.handled).toBe(true);
+    expect(res.action).toBe('payment_failed');
+    expect(res.orgId).toBe('org-failed-pay');
+    expect(res.error).toBe('Card declined: insufficient funds');
+  });
+
+  it('handles customer.subscription.updated for plan transitions', async () => {
+    let updatedPlan = '';
+    let updatedLimit = 0;
+    const mockRepo = {
+      findByStripeCustomerId: async () => ({ id: 'org-sub-update', plan: 'pro_dev' }),
+      updatePlan: async (_id: string, plan: any, limit: number) => {
+        updatedPlan = plan;
+        updatedLimit = limit;
+      },
+    } as any;
+
+    const event = {
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          customer: 'cus_update_123',
+          status: 'active',
+          id: 'sub_update_456',
+          items: {
+            data: [{ price: { id: 'price_team_29' } }],
+          },
+        },
+      },
+    };
+
+    const res = await handleStripeWebhookEvent(event, mockRepo);
+    expect(res.handled).toBe(true);
+    expect(res.action).toBe('subscription_updated');
+    expect(updatedPlan).toBe('team');
+    expect(updatedLimit).toBe(1000);
+  });
+
   it('generates checkout session URL and session ID cleanly', async () => {
     const session = await createCheckoutSession({
       orgId: 'org-abc',

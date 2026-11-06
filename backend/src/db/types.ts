@@ -17,6 +17,7 @@ export type ErrorCategory =
 
 export interface Organization {
   id: string;
+  workspace_id?: string | null;
   github_installation_id: number;
   github_account_login: string;
   github_account_type: 'Organization' | 'User';
@@ -36,6 +37,7 @@ export interface Organization {
 export interface Repository {
   id: string;
   org_id: string;
+  workspace_id?: string | null;
   github_repo_id: number;
   full_name: string;
   default_branch: string;
@@ -113,6 +115,7 @@ export interface UpsertOrganizationInput {
   githubAccountType: 'Organization' | 'User';
   plan?: PlanTier;
   monthlyRunLimit?: number;
+  workspaceId?: string | null;
 }
 
 export interface UpsertRepositoryInput {
@@ -121,6 +124,7 @@ export interface UpsertRepositoryInput {
   fullName: string;
   defaultBranch?: string;
   isActive?: boolean;
+  workspaceId?: string | null;
 }
 
 export interface UpsertFailureSignatureInput {
@@ -170,4 +174,86 @@ export interface CreateDiagnosticReportInput {
   llmModelUsed: string;
   promptTokens?: number;
   completionTokens?: number;
+}
+
+// -----------------------------------------------------------------------------
+// Workspace & User Profile Domain Models (Schema 0004)
+// -----------------------------------------------------------------------------
+
+export type UserRole = 'owner' | 'admin' | 'developer' | 'viewer';
+export type WorkspaceType = 'personal' | 'organization';
+
+export interface UserProfile {
+  id: string;
+  user_id: string;
+  username: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  role: UserRole;
+  current_workspace_id: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  type: WorkspaceType;
+  owner_id: string;
+  parent_workspace_id: string | null;
+  description: string | null;
+  is_public: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface WorkspaceMember {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  role: UserRole;
+  joined_at: Date;
+}
+
+export interface WorkspaceInvitation {
+  id: string;
+  workspace_id: string;
+  email: string;
+  role: UserRole;
+  token: string;
+  expires_at: Date;
+  accepted_at: Date | null;
+  accepted_by: string | null;
+}
+
+export interface CreateWorkspaceInput {
+  name: string;
+  type?: WorkspaceType;
+  ownerId: string;
+  parentWorkspaceId?: string | null;
+  description?: string | null;
+  isPublic?: boolean;
+}
+
+export interface UpdateWorkspaceInput {
+  name?: string;
+  description?: string | null;
+  isPublic?: boolean;
+}
+
+export interface AddWorkspaceMemberInput {
+  workspaceId: string;
+  userId: string;
+  role: UserRole;
+}
+
+export interface UpsertUserProfileInput {
+  userId: string;
+  username?: string | null;
+  fullName?: string | null;
+  avatarUrl?: string | null;
+  bio?: string | null;
+  role?: UserRole;
+  currentWorkspaceId?: string | null;
 }

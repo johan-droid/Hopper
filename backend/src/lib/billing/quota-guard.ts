@@ -50,8 +50,29 @@ export interface QuotaCheckResult {
   exhaustionNotice?: string;
 }
 
-export function checkQuota(plan: PlanTier, runsUsed: number, billingUrl = 'https://hopper.dev/billing'): QuotaCheckResult {
+export function checkQuota(
+  plan: PlanTier,
+  runsUsed: number,
+  billingUrl = 'https://hopper.dev/billing',
+  options?: { enforce?: boolean }
+): QuotaCheckResult {
+  const isEnforced =
+    options?.enforce ??
+    (process.env.ENABLE_COMMERCIAL_QUOTA === 'true' || process.env.NODE_ENV === 'test');
+
   const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+
+  if (!isEnforced) {
+    // Traction Validation Discovery: Commercial quota enforcement is dormant & non-blocking.
+    return {
+      allowed: true,
+      plan,
+      runsUsed,
+      limit: limits.monthlyRuns,
+      remainingRuns: 999999,
+    };
+  }
+
   const allowed = runsUsed < limits.monthlyRuns;
   const remaining = Math.max(0, limits.monthlyRuns - runsUsed);
 

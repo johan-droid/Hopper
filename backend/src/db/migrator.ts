@@ -25,7 +25,7 @@ export async function runMigrations(
 
   const migrationFiles = fs
     .readdirSync(migrationsDir)
-    .filter((file) => file.endsWith('.sql'))
+    .filter((file) => file.endsWith('.sql') && fs.statSync(path.join(migrationsDir, file)).isFile())
     .sort();
 
   if (migrationFiles.length === 0) {

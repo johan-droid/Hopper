@@ -279,6 +279,23 @@ export async function handleStripeWebhookEvent(
       return { handled: true, action: 'invoice_logged' };
     }
 
+    // -----------------------------------------------------------------------
+    // 5. Invoice Payment Failed (Grace Period Alert)
+    // -----------------------------------------------------------------------
+    case 'invoice.payment_failed': {
+      const invoice = event.data?.object;
+      const customerId = invoice?.customer as string;
+      const org = await orgRepo.findByStripeCustomerId(customerId);
+
+      console.warn(`[Stripe] Invoice payment failed for customer ${customerId} (org: ${org?.id || 'unknown'})`);
+      return {
+        handled: true,
+        action: 'payment_failed',
+        orgId: org?.id,
+        error: invoice?.last_payment_error?.message || 'Invoice payment failed',
+      };
+    }
+
     default:
       return {
         handled: false,

@@ -80,6 +80,7 @@ program
         console.log(`  ✔ Seed status: ${seedRes.details}`);
       }
       console.log('\nDatabase setup complete.\n');
+      process.exit(0);
     } catch (err: any) {
       console.error('\n✖ Migration failed:', err.message, '\n');
       process.exit(1);

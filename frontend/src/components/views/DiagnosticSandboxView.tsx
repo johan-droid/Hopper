@@ -67,6 +67,7 @@ export const DiagnosticSandboxView: React.FC = () => {
   const [filesStr, setFilesStr] = useState(PRESETS.playwright.modifiedFiles.join(', '));
   const [rawLog, setRawLog] = useState(PRESETS.playwright.rawLog);
   const [result, setResult] = useState<AdhocDiagnoseResponse | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const diagnoseMutation = useAdhocDiagnoseMutation();
 
@@ -77,10 +78,12 @@ export const DiagnosticSandboxView: React.FC = () => {
     setStepName(p.stepName);
     setFilesStr(p.modifiedFiles.join(', '));
     setRawLog(p.rawLog);
+    setErrorMsg(null);
   };
 
   const handleRunDiagnosis = async () => {
     if (!rawLog.trim()) return;
+    setErrorMsg(null);
     const modifiedFiles = filesStr
       .split(',')
       .map((s) => s.trim())
@@ -94,51 +97,9 @@ export const DiagnosticSandboxView: React.FC = () => {
         modifiedFiles,
       });
       setResult(data);
-    } catch {
-      // Local fallback for offline/isolated demo
-      const isTimeout = rawLog.includes('Timeout') || rawLog.includes('exceeded');
-      const isOOM = rawLog.includes('heap out of memory') || rawLog.includes('137');
-      const score = isTimeout ? 91.0 : isOOM ? 12.0 : 64.0;
-
-      const fallback: AdhocDiagnoseResponse = {
-        signatureHash: 'sha256:e92a81b3c07f41...',
-        detectedFramework: isTimeout ? 'playwright' : isOOM ? 'node' : 'python',
-        detectedExitCode: isOOM ? 137 : 1,
-        flakinessScore: score,
-        diagnosis: {
-          root_cause_clues: isTimeout
-            ? 'Target DOM element failed to appear within the 30000ms timeout threshold, likely caused by asynchronous UI rendering lag or unmocked upstream network request.'
-            : isOOM
-            ? 'Node.js V8 process exceeded max memory ceiling (2048MB) during asset optimization.'
-            : 'Deadlock occurred during concurrent database transaction isolation.',
-          likely_flaky_test: {
-            is_flaky: score >= 65,
-            confidence: score,
-            test_name: stepName,
-            reasoning: isTimeout
-              ? 'Timeout failures with unresolved async locator promises exhibit high flakiness in CI runner virtual machines under CPU contention.'
-              : 'Deterministic failure reproducible whenever build memory requirements exceed process limit.',
-          },
-          relevant_log_lines: [
-            {
-              line_number: 4,
-              content: 'Error: Timeout of 30000ms exceeded waiting for selector',
-              explanation: 'Root failure assertion',
-            },
-            {
-              line_number: 5,
-              content: 'waiting for locator to be visible',
-              explanation: 'Element unmounted',
-            },
-          ],
-          recommended_next_checks: [
-            'Add Playwright waitForResponse or mock upstream payment API endpoint',
-            'Verify database connection pool timeout parameters',
-            'Check if same commit SHA passes on immediate rerun',
-          ],
-        },
-      };
-      setResult(fallback);
+    } catch (err: any) {
+      setResult(null);
+      setErrorMsg(err?.message || 'Ad-hoc diagnosis request failed.');
     }
   };
 
@@ -255,7 +216,26 @@ export const DiagnosticSandboxView: React.FC = () => {
             HOPPER SYNTHESIZED DIAGNOSIS
           </div>
 
-          {result ? (
+          {errorMsg ? (
+            <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/40 space-y-3 font-mono">
+              <div className="flex items-center gap-2 text-rose-400 font-bold text-xs">
+                <ShieldAlert className="w-4 h-4" />
+                <span>Diagnosis Gateway Error</span>
+              </div>
+              <p className="text-xs text-rose-200 leading-relaxed">
+                {errorMsg}
+              </p>
+              <div className="text-[11px] text-slate-400">
+                Please verify that the backend API gateway is reachable and that the log payload contains valid ASCII/UTF-8 log lines.
+              </div>
+              <button
+                onClick={handleRunDiagnosis}
+                className="px-3 py-1.5 rounded bg-rose-900/40 hover:bg-rose-800/40 text-rose-300 text-xs border border-rose-700/50 transition-colors cursor-pointer"
+              >
+                Retry Diagnosis
+              </button>
+            </div>
+          ) : result ? (
             <div className="space-y-4">
               {/* Badges strip */}
               <div className="flex items-center justify-between pb-3 border-b border-white/10 flex-wrap gap-2 text-xs font-mono">
