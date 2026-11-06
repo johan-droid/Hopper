@@ -1,35 +1,206 @@
-name: Hopper CI/CD Lifecycle
+name: CI
 
+# Verification only. Deployment is performed by Vercel Git integration so a
+# single commit is never shipped by two competing pipelines.
 on:
   push:
-    branches: [main]
+    branches: [main, 'migration/**']
   pull_request:
     branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  NODE_ENV: test
+  NODE_VERSION: '20'
+
 jobs:
-  sdlc-lifecycle:
-    name: Complete Build Lifecycle
+  # ---------------------------------------------------------------------------
+  # Typecheck, unit/integration tests, builds
+  # ---------------------------------------------------------------------------
+  quality-gate:
+    name: Typecheck · Tests · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hopper_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hopper_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hopper_ci
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/hopper_ci
+      SUPABASE_JWT_SECRET: ci-only-jwt-secret-at-least-32-bytes-long-ok
+      GITHUB_APP_WEBHOOK_SECRET: ci-only-webhook-secret
+      AI_PROVIDER: mock
+      QUEUE_STORE: memory
+      COORDINATION_BACKEND: memory
+      QUEUE_TRANSPORT: off
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Backend typecheck
+        run: npm --prefix backend run lint
+
+      - name: Frontend typecheck
+        run: npm --prefix frontend run lint
+
+      - name: Backend tests
+        run: npm --prefix backend run test
+
+      - name: Frontend tests
+        run: npm --prefix frontend run test
+
+      - name: Build backend
+        run: npm run build:backend
+
+      - name: Build frontend
+        run: npm run build:frontend
+
+      - name: Verify build artifacts
+        run: |
+          set -euo pipefail
+          test -f backend/dist/server/index.js
+          test -f backend/dist/workers/worker-entry.js
+          test -f frontend/dist/index.html
+          echo "Build artifacts present."
+
+  # ---------------------------------------------------------------------------
+  # Fresh-database migration validation (forward-only, idempotent)
+  # ---------------------------------------------------------------------------
+  migration-safety:
+    name: Migration Validation
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hopper_migrate
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hopper_migrate"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hopper_migrate
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/hopper_migrate
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
-      - name: Install Dependencies
-        run: npm ci
+      - run: npm ci
 
-      - name: Hopper Unified Lifecycle Pipeline
-        run: npm --prefix backend run lifecycle
+      - name: Apply migrations to a fresh database
+        run: npm --prefix backend run migrate
 
-      - name: Verify Docker Build
-        run: docker build -t hopper:latest ./backend
+      - name: Re-apply migrations (idempotency)
+        run: npm --prefix backend run migrate
+
+      - name: Assert schema, pgvector and durable queue objects
+        run: |
+          set -euo pipefail
+          export PGPASSWORD=postgres
+          psql -h localhost -U postgres -d hopper_migrate -v ON_ERROR_STOP=1 <<'SQL'
+          SELECT extname FROM pg_extension WHERE extname = 'vector';
+          SELECT to_regclass('public.hopper_job_queue');
+          SELECT to_regclass('public.hopper_job_dead_letters');
+          SELECT to_regclass('public.hopper_webhook_deliveries');
+          SELECT to_regclass('public.hopper_rate_limits');
+          SELECT to_regclass('public.hopper_diagnosis_locks');
+          SELECT to_regclass('public.hopper_processed_events');
+          SELECT proname FROM pg_proc WHERE proname IN ('hopper_claim_jobs','hopper_consume_rate_limit');
+          SELECT indexname FROM pg_indexes WHERE indexname = 'idx_failure_signatures_embedding_hnsw';
+          SQL
+
+      - name: Verify no Redis dependency remains
+        run: |
+          set -euo pipefail
+          if grep -rn "bullmq\|ioredis" backend/src backend/package.json; then
+            echo "::error::Redis/BullMQ dependency reintroduced"
+            exit 1
+          fi
+          echo "No Redis/BullMQ references in backend source."
+
+  # ---------------------------------------------------------------------------
+  # Vercel configuration validation
+  # ---------------------------------------------------------------------------
+  vercel-config:
+    name: Vercel Config Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Validate vercel.json and queue consumer trigger
+        run: |
+          node -e '
+            const fs = require("fs");
+            const cfg = JSON.parse(fs.readFileSync("vercel.json", "utf8"));
+            const fn = cfg.functions?.["api/queue/consume.ts"];
+            if (!fn) throw new Error("queue consumer function missing");
+            const trigger = (fn.experimentalTriggers || []).find(
+              (t) => t.type === "queue/v2beta" && t.topic === "hopper-ci-events"
+            );
+            if (!trigger) throw new Error("Vercel Queues trigger missing for hopper-ci-events");
+            if (!cfg.rewrites?.some((r) => r.source === "/api/(.*)")) {
+              throw new Error("API rewrite missing");
+            }
+            if (!Array.isArray(cfg.crons) || cfg.crons.length === 0) {
+              throw new Error("queue drain cron missing");
+            }
+            console.log("vercel.json valid:", JSON.stringify(fn.experimentalTriggers));
+          '
+
+      - name: Verify no Cloudflare deployment artifacts
+        run: |
+          set -euo pipefail
+          for path in wrangler.toml deploy/cloudflare frontend/public/_redirects frontend/public/_headers; do
+            if [ -e "$path" ]; then
+              echo "::error::Retired Cloudflare artifact still present: $path"
+              exit 1
+            fi
+          done
+          echo "No Cloudflare deployment artifacts."
+
+  security:
+    name: Security Gate
+    uses: ./.github/workflows/security.yml

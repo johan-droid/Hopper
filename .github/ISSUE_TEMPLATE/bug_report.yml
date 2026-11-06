@@ -21,7 +21,7 @@ body:
         - "Queue Processing / BullMQ Worker"
         - "PostgreSQL Database / RLS Policies"
         - "Frontend Dashboard / User Interface"
-        - "Cloudflare Edge Gateway / Pages"
+        - "Vercel deployment (API functions / queue consumer)"
     validations:
       required: true
 

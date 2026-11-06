@@ -23,4 +23,4 @@
 # Operations & Infrastructure Automation
 /scripts/ @johan-droid
 /docker-compose.yml @johan-droid
-/wrangler.toml @johan-droid
+/vercel.json @johan-droid
