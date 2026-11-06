@@ -1,21 +1,38 @@
 /**
- * Webhooks Router (GitHub & Stripe Ingress).
- * Provides fast ingress (<50ms) for CI workflow webhooks and billing lifecycle events.
+ * Webhooks Router (GitHub & Stripe ingress).
+ *
+ * Security model:
+ *   - GitHub: HMAC-SHA256 over the raw body, then replay deduplication.
+ *   - Stripe: Stripe's own signed payload verification, then event dedup.
+ *   - Neither route accepts a user JWT.
+ *
+ * Delivery model (GitHub):
+ *   1. Validate signature and deduplicate the delivery.
+ *   2. Durably enqueue the job in PostgreSQL (idempotent on job + attempt).
+ *   3. Publish to Vercel Queues for immediate push delivery.
+ *   4. Only acknowledge once (2) succeeded. If the queue publish failed for an
+ *      unexpected reason, process a bounded batch inline; if that also fails,
+ *      return 503 so GitHub retries instead of us silently dropping the event.
  */
 
 import { Router, Request, Response } from 'express';
 import { verifyGitHubWebhookSignature } from '../../lib/github/app-auth.js';
-import { verifyStripeWebhookSignature, handleStripeWebhookEvent } from '../../lib/billing/stripe-handler.js';
-import { checkTenantRateLimit, claimWebhookDelivery } from '../../queue/redis.js';
+import {
+  verifyStripeWebhookSignature,
+  handleStripeWebhookEvent,
+} from '../../lib/billing/stripe-handler.js';
+import { checkTenantRateLimit, claimWebhookDelivery } from '../../queue/coordination.js';
 import { enqueueWorkflowJob } from '../../queue/ci-queue.js';
-import { processWorkflowJob } from '../../workers/processors/workflow-job.processor.js';
+import { drainQueue, processQueuedJob } from '../../queue/consumer.js';
+import { getJobStore } from '../../queue/job-store.js';
 import { WorkflowJobEventData } from '../../queue/types.js';
+import { processWorkflowJob } from '../../workers/processors/workflow-job.processor.js';
 
 export function createWebhooksRouter(): Router {
   const router = Router();
 
   // ---------------------------------------------------------------------------
-  // 1. GitHub Webhook Ingress (Sub-50ms Response)
+  // 1. GitHub Webhook Ingress
   // ---------------------------------------------------------------------------
   router.post('/github', async (req: Request, res: Response) => {
     const signature = req.headers['x-hub-signature-256'] as string | undefined;
@@ -27,31 +44,36 @@ export function createWebhooksRouter(): Router {
       return res.status(503).json({ error: 'GitHub webhook is not configured' });
     }
 
-    // 1. Verify HMAC-SHA256 signature in <10ms
     const rawBody = (req as any).rawBody;
     if (!Buffer.isBuffer(rawBody)) {
-      return res.status(400).json({ error: 'Raw request body is required for signature verification' });
+      return res
+        .status(400)
+        .json({ error: 'Raw request body is required for signature verification' });
     }
-    const isValid = verifyGitHubWebhookSignature(rawBody, signature, webhookSecret);
 
-    if (!isValid) {
+    if (!verifyGitHubWebhookSignature(rawBody, signature, webhookSecret)) {
       return res.status(401).json({ error: 'Invalid HMAC-SHA256 signature' });
     }
 
-    // 1.5. Webhook Replay Deduplication - use x-github-delivery header with a 24h TTL
+    // Replay deduplication on the GitHub delivery id.
     const deliveryId = req.headers['x-github-delivery'] as string | undefined;
     if (deliveryId) {
-      const isNewDelivery = await claimWebhookDelivery(deliveryId);
-      if (!isNewDelivery) {
-        return res.status(200).json({ status: 'duplicate_ignored' });
+      try {
+        const isNewDelivery = await claimWebhookDelivery(deliveryId);
+        if (!isNewDelivery) {
+          return res.status(200).json({ status: 'duplicate_ignored' });
+        }
+      } catch (err: any) {
+        // Fail closed: without a dedup guarantee we ask GitHub to retry.
+        console.error(`[GitHub] Delivery dedup unavailable: ${err.message}`);
+        return res.status(503).json({ error: 'Delivery deduplication unavailable' });
       }
     }
 
     const payload = req.body;
 
-    // 2. Filter for completed CI events
-    const isJobCompleted = eventName === 'workflow_job' && payload.action === 'completed';
-    const isRunCompleted = eventName === 'workflow_run' && payload.action === 'completed';
+    const isJobCompleted = eventName === 'workflow_job' && payload?.action === 'completed';
+    const isRunCompleted = eventName === 'workflow_run' && payload?.action === 'completed';
 
     if (!isJobCompleted && !isRunCompleted) {
       return res.status(200).json({
@@ -64,16 +86,13 @@ export function createWebhooksRouter(): Router {
       (payload.workflow_job?.conclusion || payload.workflow_run?.conclusion) as 'failure' | 'success';
 
     if (conclusion !== 'failure' && conclusion !== 'success') {
-      return res.status(200).json({
-        status: 'ignored',
-        reason: `Ignored conclusion: ${conclusion}`,
-      });
+      return res.status(200).json({ status: 'ignored', reason: `Ignored conclusion: ${conclusion}` });
     }
 
-    // 3. Fast Tenant Rate Limit Check via Redis
-    const orgLogin = payload.organization?.login || payload.repository?.owner?.login || 'default-org';
-    const rateCheck = await checkTenantRateLimit(orgLogin, 120, 60);
+    const orgLogin =
+      payload.organization?.login || payload.repository?.owner?.login || 'default-org';
 
+    const rateCheck = await checkTenantRateLimit(orgLogin, 120, 60);
     if (!rateCheck.allowed) {
       return res.status(429).json({
         error: 'Too Many Requests',
@@ -81,7 +100,6 @@ export function createWebhooksRouter(): Router {
       });
     }
 
-    // 4. Construct Normalized Workflow Job Event Data
     const eventData: WorkflowJobEventData = {
       installationId: payload.installation?.id || payload.organization?.id || 1010101,
       orgLogin,
@@ -91,12 +109,15 @@ export function createWebhooksRouter(): Router {
       workflowName: payload.workflow_run?.name || payload.workflow_job?.workflow_name || 'CI',
       jobName: payload.workflow_job?.name || payload.workflow_run?.name || 'test / build',
       stepName:
-        payload.workflow_job?.steps?.find((s: any) => s.conclusion === 'failure')?.name || 'Execute Test Suite',
+        payload.workflow_job?.steps?.find((s: any) => s.conclusion === 'failure')?.name ||
+        'Execute Test Suite',
       githubRunId: payload.workflow_run?.id || payload.workflow_job?.run_id || 12345,
       githubJobId: payload.workflow_job?.id || payload.workflow_run?.id || 67890,
       githubRunAttempt: payload.workflow_run?.run_attempt || payload.workflow_job?.run_attempt || 1,
       commitSha:
-        payload.workflow_job?.head_sha || payload.workflow_run?.head_sha || '0000000000000000000000000000000000000000',
+        payload.workflow_job?.head_sha ||
+        payload.workflow_run?.head_sha ||
+        '0000000000000000000000000000000000000000',
       branch: payload.workflow_run?.head_branch || payload.workflow_job?.head_branch || 'main',
       prNumber: payload.workflow_run?.pull_requests?.[0]?.number || null,
       actorLogin: payload.sender?.login || null,
@@ -106,35 +127,75 @@ export function createWebhooksRouter(): Router {
       runUrl: payload.workflow_run?.html_url || payload.workflow_job?.html_url,
     };
 
-    // 5. Synchronous execution fallback (for debugging/tests via ?sync=true)
-    if (req.query.sync === 'true') {
+    // Explicit synchronous mode is a local debugging affordance only.
+    if (req.query.sync === 'true' && process.env.NODE_ENV !== 'production') {
       const syncResult = await processWorkflowJob(eventData);
       return res.status(200).json(syncResult);
     }
 
-    // 6. Fast Async Queue Dispatch to BullMQ
+    // 2. Durable enqueue. A throw here means the event is not safely persisted.
+    let enqueued;
     try {
-      const { jobId } = await enqueueWorkflowJob(eventData);
+      enqueued = await enqueueWorkflowJob(eventData);
+    } catch (err: any) {
+      console.error(`[GitHub] Durable enqueue failed: ${err.message}`);
+      return res.status(503).json({
+        error: 'Event could not be durably queued',
+        retryable: true,
+      });
+    }
+
+    const published = enqueued.transport.published;
+    const transportIntentionallyDisabled = enqueued.transport.reason === 'transport_disabled';
+
+    if (published || transportIntentionallyDisabled) {
       return res.status(202).json({
-        status: 'queued',
-        jobId,
+        status: enqueued.duplicate ? 'already_queued' : 'queued',
+        jobId: enqueued.jobId,
         githubJobId: eventData.githubJobId,
         conclusion: eventData.conclusion,
+        delivery: published ? 'vercel-queue' : 'postgres-outbox',
         receivedAt: new Date().toISOString(),
       });
-    } catch (_queueErr) {
-      // Fallback: If Redis is offline in standalone dev mode, process synchronously
-      const syncResult = await processWorkflowJob(eventData);
-      return res.status(200).json(syncResult);
     }
+
+    // 3. Queue publish failed unexpectedly: bounded inline processing keeps the
+    //    event from being lost, and the DB row remains for the drain as a net.
+    try {
+      const store = getJobStore();
+      const [job] = await store.claim({
+        workerId: `webhook-inline-${Date.now()}`,
+        limit: 1,
+        lockSeconds: 120,
+      });
+
+      if (job) {
+        const outcome = await processQueuedJob(job);
+        return res.status(200).json({ status: outcome.result.status, jobId: job.id });
+      }
+
+      const drained = await drainQueue({ workerId: `webhook-drain-${Date.now()}`, limit: 1 });
+      if (drained.completed > 0) {
+        return res.status(200).json({ status: 'processed_inline', jobId: enqueued.jobId });
+      }
+    } catch (err: any) {
+      console.error(`[GitHub] Inline fallback failed: ${err.message}`);
+    }
+
+    return res.status(503).json({
+      error: 'Event persisted but not yet delivered to a consumer',
+      jobId: enqueued.jobId,
+      retryable: true,
+    });
   });
 
   // ---------------------------------------------------------------------------
-  // 2. Stripe Webhook Ingress (Subscription Lifecycle)
+  // 2. Stripe Webhook Ingress
   // ---------------------------------------------------------------------------
   router.post('/stripe', async (req: Request, res: Response) => {
     const signature = req.headers['stripe-signature'] as string | undefined;
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
     if (!webhookSecret) {
       console.error('[Stripe] Webhook rejected: STRIPE_WEBHOOK_SECRET is not configured');
       return res.status(503).json({ error: 'Stripe webhook is not configured' });
@@ -142,20 +203,25 @@ export function createWebhooksRouter(): Router {
 
     const rawBody = (req as any).rawBody;
     if (!Buffer.isBuffer(rawBody)) {
-      return res.status(400).json({ error: 'Raw request body is required for signature verification' });
+      return res
+        .status(400)
+        .json({ error: 'Raw request body is required for signature verification' });
     }
-    const isValid = verifyStripeWebhookSignature(rawBody, signature, webhookSecret);
 
-    if (!isValid) {
+    if (!verifyStripeWebhookSignature(rawBody, signature, webhookSecret)) {
       return res.status(400).json({ error: 'Invalid Stripe signature' });
     }
 
-    // Stripe Replay / Duplicate Event Deduplication via Redis (24h TTL)
     const eventId = req.body?.id;
     if (eventId) {
-      const isNewEvent = await claimWebhookDelivery(`stripe:${eventId}`);
-      if (!isNewEvent) {
-        return res.status(200).json({ status: 'duplicate_ignored', eventId });
+      try {
+        const isNewEvent = await claimWebhookDelivery(`stripe:${eventId}`);
+        if (!isNewEvent) {
+          return res.status(200).json({ status: 'duplicate_ignored', eventId });
+        }
+      } catch (err: any) {
+        console.error(`[Stripe] Event dedup unavailable: ${err.message}`);
+        return res.status(503).json({ error: 'Event deduplication unavailable', retryable: true });
       }
     }
 
@@ -170,4 +236,3 @@ export function createWebhooksRouter(): Router {
 
   return router;
 }
-

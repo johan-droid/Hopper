@@ -2,14 +2,14 @@
  * B1. Ingestion Engine — Webhook & Event Ingress.
  * Responsibilities:
  * - Validate webhook signatures (HMAC-SHA256).
- * - Enforce idempotency and replay protection via Redis delivery claims.
- * - Enforce tenant-level token bucket rate limits.
+ * - Enforce idempotency and replay protection via PostgreSQL delivery claims.
+ * - Enforce tenant-level fixed-window rate limits.
  * - Convert external payloads into canonical internal events.
  * - Detect malformed or unsupported event types.
  */
 
 import { verifyGitHubWebhookSignature } from '../../lib/github/app-auth.js';
-import { claimWebhookDelivery, checkTenantRateLimit } from '../../queue/redis.js';
+import { claimWebhookDelivery, checkTenantRateLimit } from '../../queue/coordination.js';
 import { CanonicalCIEvent } from '../types.js';
 
 export interface IngestionValidationResult {

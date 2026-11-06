@@ -1,15 +1,14 @@
 /**
  * B6. Workflow Engine — Job Orchestration & Concurrency Control.
  * Responsibilities:
- * - Coordinates BullMQ job enqueueing and lifecycle events.
- * - Manages Redis matrix burst locking to deduplicate parallel runner evaluations.
- * - Requeues duplicate parallel failures with delayed backoff.
- * - Enforces explicit state transitions across workflow executions.
+ * - Enqueues canonical CI events into the durable job store / Vercel Queues.
+ * - Coordinates PostgreSQL matrix-burst locking to deduplicate parallel runner
+ *   evaluations of the same failure signature.
+ * - Reports lock contention so the consumer can reschedule with backoff.
  */
 
-import { Job, DelayedError } from 'bullmq';
 import { enqueueWorkflowJob } from '../../queue/ci-queue.js';
-import { acquireDiagnosisLock, releaseDiagnosisLock, DiagnosisLock } from '../../queue/redis.js';
+import { acquireDiagnosisLock, releaseDiagnosisLock, DiagnosisLock } from '../../queue/coordination.js';
 import { WorkflowJobEventData } from '../../queue/types.js';
 
 export class WorkflowEngine {
@@ -17,29 +16,24 @@ export class WorkflowEngine {
    * Enqueues a canonical CI event into the processing queue.
    */
   async enqueueEvent(eventData: WorkflowJobEventData): Promise<{ jobId: string }> {
-    return enqueueWorkflowJob(eventData);
+    const result = await enqueueWorkflowJob(eventData);
+    return { jobId: result.jobId };
   }
 
   /**
    * Acquires a distributed burst lock for a failure signature hash.
-   * If another worker is currently processing this signature, requeues the job with delay.
+   * Returns null when another consumer already holds it; the caller is
+   * responsible for rescheduling (the consumer reschedules without burning an
+   * attempt).
    */
   async acquireBurstLock(
     repoId: string,
     signatureHash: string,
-    job?: Job<WorkflowJobEventData>,
-    delayMs: number = 5000
+    _job?: unknown,
+    _delayMs: number = 5000
   ): Promise<DiagnosisLock | null> {
-    if (!job) return null;
-
     const lock = await acquireDiagnosisLock(repoId, signatureHash);
-    if (!lock.acquired) {
-      // Requeue job with delay so it can read the completed cached diagnosis from the other worker
-      await job.moveToDelayed(Date.now() + delayMs, job.token);
-      throw new DelayedError();
-    }
-
-    return lock;
+    return lock.acquired ? lock : null;
   }
 
   /**
