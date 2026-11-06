@@ -19,16 +19,21 @@ import { Zap } from 'lucide-react';
 
 type Mode = 'signin' | 'signup' | 'reset';
 
-const LoginPage: React.FC = () => {
+const LoginPage: React.FC<{ initialMode?: Mode }> = ({ initialMode = 'signin' }) => {
   const { isAuthenticated, status } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
-  const [mode, setMode] = useState<Mode>('signin');
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // /login and /signup render the same page; keep the mode in sync with the URL.
+  React.useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
 
   const from = (location.state as { from?: string } | null)?.from ?? ROUTES.overview;
 

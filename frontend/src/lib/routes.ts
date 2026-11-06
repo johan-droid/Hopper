@@ -16,16 +16,19 @@ import type { LucideIcon } from 'lucide-react';
 export const ROUTES = {
   landing: '/',
   login: '/login',
+  signup: '/signup',
   overview: '/app/overview',
   repositories: '/app/repositories',
   repository: (id: string) => `/app/repositories/${encodeURIComponent(id)}`,
   activity: '/app/activity',
+  failure: (failureId: string) => `/app/failures/${encodeURIComponent(failureId)}`,
   investigations: '/app/investigations',
   investigation: (signatureId: string) => `/app/investigations/${encodeURIComponent(signatureId)}`,
   diagnoses: '/app/diagnoses',
   trends: '/app/trends',
   integrations: '/app/integrations',
   settings: '/app/settings',
+  settingsGeneral: '/app/settings/general',
   members: '/app/settings/members',
   security: '/app/settings/security',
   billing: '/app/settings/billing',
@@ -61,9 +64,17 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: ROUTES.integrations, label: 'Integrations', icon: Plug, description: 'Connections and service status' },
       { to: ROUTES.members, label: 'Members', icon: Users, description: 'Workspace membership and roles' },
-      { to: ROUTES.settings, label: 'Settings', icon: Cog, end: true, description: 'Profile and workspace settings' },
+      { to: ROUTES.settingsGeneral, label: 'Settings', icon: Cog, description: 'Profile and workspace settings' },
       { to: ROUTES.billing, label: 'Billing & Usage', icon: CreditCard, description: 'Plan and usage' },
       { to: ROUTES.security, label: 'Security', icon: ShieldCheck, description: 'Session and access information' },
     ],
   },
 ];
+
+/** Sub-navigation shared by every settings route. */
+export const SETTINGS_TABS = [
+  { to: ROUTES.settingsGeneral, label: 'General' },
+  { to: ROUTES.members, label: 'Members' },
+  { to: ROUTES.security, label: 'Security' },
+  { to: ROUTES.billing, label: 'Billing' },
+] as const;

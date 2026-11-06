@@ -10,6 +10,7 @@ import { useSessionBootstrap } from '../features/auth/useSession';
 import { useThemeApplication } from '../components/layout/Sidebar';
 import { WorkspaceProvider } from '../features/workspace/WorkspaceProvider';
 import { AppShell } from '../components/layout/AppShell';
+import { ToastProvider } from '../components/ui/feedback';
 import { ROUTES } from '../lib/routes';
 import { Skeleton } from '../components/ui/primitives';
 
@@ -19,10 +20,12 @@ const OverviewPage = lazy(() => import('../features/overview/OverviewPage'));
 const RepositoriesPage = lazy(() => import('../features/repositories/RepositoriesPage'));
 const RepositoryDetailPage = lazy(() => import('../features/repositories/RepositoryDetailPage'));
 const ActivityPage = lazy(() => import('../features/activity/ActivityPage'));
+const FailureDetailPage = lazy(() => import('../features/failures/FailureDetailPage'));
 const InvestigationPage = lazy(() => import('../features/investigations/InvestigationPage'));
 const DiagnosesPage = lazy(() => import('../features/diagnoses/DiagnosesPage'));
 const TrendsPage = lazy(() => import('../features/trends/TrendsPage'));
 const IntegrationsPage = lazy(() => import('../features/integrations/IntegrationsPage'));
+const SettingsLayout = lazy(() => import('../features/settings/SettingsLayout'));
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'));
 const MembersPage = lazy(() => import('../features/settings/MembersPage'));
 const SecurityPage = lazy(() => import('../features/settings/SecurityPage'));
@@ -67,6 +70,7 @@ const Shell: React.FC = () => (
 const router = createBrowserRouter([
   { path: ROUTES.landing, element: withSuspense(<LandingPage />) },
   { path: ROUTES.login, element: withSuspense(<LoginPage />) },
+  { path: ROUTES.signup, element: withSuspense(<LoginPage initialMode="signup" />) },
   {
     path: '/app',
     element: <Shell />,
@@ -76,15 +80,23 @@ const router = createBrowserRouter([
       { path: 'repositories', element: withSuspense(<RepositoriesPage />) },
       { path: 'repositories/:repositoryId', element: withSuspense(<RepositoryDetailPage />) },
       { path: 'activity', element: withSuspense(<ActivityPage />) },
+      { path: 'failures/:failureId', element: withSuspense(<FailureDetailPage />) },
       { path: 'investigations', element: withSuspense(<InvestigationPage />) },
       { path: 'investigations/:signatureId', element: withSuspense(<InvestigationPage />) },
       { path: 'diagnoses', element: withSuspense(<DiagnosesPage />) },
       { path: 'trends', element: withSuspense(<TrendsPage />) },
       { path: 'integrations', element: withSuspense(<IntegrationsPage />) },
-      { path: 'settings', element: withSuspense(<SettingsPage />) },
-      { path: 'settings/members', element: withSuspense(<MembersPage />) },
-      { path: 'settings/security', element: withSuspense(<SecurityPage />) },
-      { path: 'settings/billing', element: withSuspense(<BillingPage />) },
+      {
+        path: 'settings',
+        element: withSuspense(<SettingsLayout />),
+        children: [
+          { index: true, element: <Navigate to={ROUTES.settingsGeneral} replace /> },
+          { path: 'general', element: withSuspense(<SettingsPage />) },
+          { path: 'members', element: withSuspense(<MembersPage />) },
+          { path: 'security', element: withSuspense(<SecurityPage />) },
+          { path: 'billing', element: withSuspense(<BillingPage />) },
+        ],
+      },
       { path: '*', element: withSuspense(<NotFoundPage />) },
     ],
   },
@@ -99,7 +111,9 @@ const AppRoot: React.FC = () => {
 
 export const App: React.FC = () => (
   <QueryClientProvider client={queryClient}>
-    <AppRoot />
+    <ToastProvider>
+      <AppRoot />
+    </ToastProvider>
   </QueryClientProvider>
 );
 

@@ -16,6 +16,7 @@ import {
   Select,
 } from '../../components/ui/primitives';
 import { DataTable } from '../../components/ui/DataTable';
+import { useToast } from '../../components/ui/feedback';
 import { ROUTES } from '../../lib/routes';
 import { formatDate } from '../../lib/format';
 import type { Repository } from '../../api/schema';
@@ -23,6 +24,7 @@ import { GitBranch, GitFork, Link2, Search } from 'lucide-react';
 
 const RepositoriesPage: React.FC = () => {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const { workspaceId, workspace, workspaces, setWorkspaceId, errorMessage, refetch } = useWorkspace();
   const repositoriesQuery = useRepositoriesQuery(workspaceId);
   const repositories = repositoriesQuery.data?.repositories ?? [];
@@ -32,8 +34,21 @@ const RepositoriesPage: React.FC = () => {
   const linkMutation = useMutation({
     mutationFn: ({ repoId, targetWorkspaceId }: { repoId: string; targetWorkspaceId: string }) =>
       api.linkRepositoryToWorkspace(repoId, targetWorkspaceId),
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.repositories(workspaceId) });
+      const target = workspaces.find((item) => item.id === variables.targetWorkspaceId);
+      toast.push({
+        tone: 'success',
+        title: 'Repository linked',
+        description: target ? `Now scoped to ${target.name}.` : 'Repository scope updated.',
+      });
+    },
+    onError: (error: Error) => {
+      toast.push({
+        tone: 'danger',
+        title: 'Could not link the repository',
+        description: error.message,
+      });
     },
   });
 
@@ -217,6 +232,7 @@ const RepositoriesPage: React.FC = () => {
             </InlineNotice>
           </div>
         ) : null}
+
       </Card>
 
       {workspaces.length > 1 ? (
