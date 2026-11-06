@@ -2,50 +2,155 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --bg-canvas: #0a0f1d;
-  --bg-card: #0f1523;
-  --bg-elevated: #151e32;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-focus: rgba(6, 182, 212, 0.4);
-  --accent-cyan: #06b6d4;
-  --accent-blue: #3b82f6;
-  --accent-emerald: #10b981;
-  --accent-amber: #f59e0b;
-  --accent-rose: #f43f5e;
+/*
+ * Design tokens. Every surface, border and accent used by the app resolves here,
+ * so light/dark parity and contrast changes happen in one place.
+ */
+@layer base {
+  :root {
+    color-scheme: dark;
+
+    /* Surfaces */
+    --surface-canvas: 10 15 29;
+    --surface-raised: 15 21 35;
+    --surface-overlay: 21 30 50;
+    --surface-inset: 6 9 19;
+
+    /* Text */
+    --text-primary: 248 250 252;
+    --text-secondary: 148 163 184;
+    --text-muted: 100 116 139;
+
+    /* Lines */
+    --border-subtle: 255 255 255;
+    --border-subtle-alpha: 0.08;
+    --border-strong-alpha: 0.16;
+
+    /* Accents */
+    --accent: 6 182 212;
+    --accent-contrast: 8 15 25;
+    --success: 16 185 129;
+    --warning: 245 158 11;
+    --danger: 244 63 94;
+    --info: 59 130 246;
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+
+    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+    --motion-fast: 120ms;
+    --motion-base: 180ms;
+    --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .light {
+    color-scheme: light;
+
+    --surface-canvas: 248 250 252;
+    --surface-raised: 255 255 255;
+    --surface-overlay: 241 245 249;
+    --surface-inset: 226 232 240;
+
+    --text-primary: 15 23 42;
+    --text-secondary: 71 85 105;
+    --text-muted: 100 116 139;
+
+    --border-subtle: 15 23 42;
+    --border-subtle-alpha: 0.1;
+    --border-strong-alpha: 0.18;
+
+    --accent: 8 145 178;
+    --accent-contrast: 255 255 255;
+    --success: 5 150 105;
+    --warning: 180 83 9;
+    --danger: 190 18 60;
+    --info: 37 99 235;
+
+    --shadow-raised: 0 1px 2px rgb(15 23 42 / 0.06), 0 8px 24px -16px rgb(15 23 42 / 0.2);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: rgb(var(--surface-canvas));
+    color: rgb(var(--text-primary));
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  code,
+  pre,
+  kbd,
+  .font-mono {
+    font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+    font-variant-ligatures: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  ::selection {
+    background-color: rgb(var(--accent) / 0.28);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgb(var(--surface-inset));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--text-muted) / 0.35);
+    border-radius: 999px;
+    border: 2px solid rgb(var(--surface-inset));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--text-muted) / 0.55);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-body {
-  background-color: var(--bg-canvas);
-  color: #f8fafc;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  overflow-x: hidden;
-}
+@layer utilities {
+  .surface {
+    background-color: rgb(var(--surface-raised));
+    border: 1px solid rgb(var(--border-subtle) / var(--border-subtle-alpha));
+  }
 
-code, pre, .font-mono {
-  font-family: 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
-}
+  .text-secondary {
+    color: rgb(var(--text-secondary));
+  }
 
-/* Custom scrollbars for high-density log viewers */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #080c14;
-}
-::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #334155;
-}
+  .text-muted {
+    color: rgb(var(--text-muted));
+  }
 
-/* Paywall row blur transition */
-.paywall-blur {
-  filter: blur(4px);
-  user-select: none;
-  pointer-events: none;
-  opacity: 0.65;
+  .hairline {
+    border-color: rgb(var(--border-subtle) / var(--border-subtle-alpha));
+  }
+
+  /* Long CI log lines must never force horizontal page overflow. */
+  .log-line {
+    overflow-wrap: anywhere;
+  }
 }

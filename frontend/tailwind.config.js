@@ -1,37 +1,43 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
-  darkMode: 'class',
+  darkMode: ['class', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
-        canvas: {
-          DEFAULT: '#0a0f1d',
-          dark: '#060913',
-          card: '#0f1523',
-          elevated: '#151e32',
-        },
-        border: {
-          subtle: 'rgba(255, 255, 255, 0.08)',
-          glow: 'rgba(6, 182, 212, 0.3)',
+        canvas: 'rgb(var(--surface-canvas) / <alpha-value>)',
+        raised: 'rgb(var(--surface-raised) / <alpha-value>)',
+        overlay: 'rgb(var(--surface-overlay) / <alpha-value>)',
+        inset: 'rgb(var(--surface-inset) / <alpha-value>)',
+        hairline: 'rgb(var(--border-subtle) / var(--border-subtle-alpha))',
+        ink: {
+          DEFAULT: 'rgb(var(--text-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--text-secondary) / <alpha-value>)',
+          muted: 'rgb(var(--text-muted) / <alpha-value>)',
         },
         accent: {
-          cyan: '#06b6d4',
-          blue: '#3b82f6',
-          emerald: '#10b981',
-          amber: '#f59e0b',
-          rose: '#f43f5e',
+          DEFAULT: 'rgb(var(--accent) / <alpha-value>)',
+          contrast: 'rgb(var(--accent-contrast) / <alpha-value>)',
         },
-        text: {
-          primary: '#f8fafc',
-          secondary: '#94a3b8',
-          muted: '#64748b',
-          dim: '#475569',
-        },
+        success: 'rgb(var(--success) / <alpha-value>)',
+        warning: 'rgb(var(--warning) / <alpha-value>)',
+        danger: 'rgb(var(--danger) / <alpha-value>)',
+        info: 'rgb(var(--info) / <alpha-value>)',
+      },
+      borderRadius: {
+        sm: 'var(--radius-sm)',
+        md: 'var(--radius-md)',
+        lg: 'var(--radius-lg)',
+      },
+      boxShadow: {
+        raised: 'var(--shadow-raised)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'Menlo', 'monospace'],
+      },
+      transitionTimingFunction: {
+        standard: 'cubic-bezier(0.2, 0, 0, 1)',
       },
     },
   },
