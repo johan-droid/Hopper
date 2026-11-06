@@ -1,3 +1,10 @@
+> **Historical document (pre-Vercel).** This file describes the retired
+> Cloudflare architecture and is retained as an audit trail. The current
+> architecture is `docs/architecture/VERCEL_TARGET_ARCHITECTURE.md`; operations
+> are in `docs/deployment/VERCEL_DEPLOYMENT_RUNBOOK.md`. Links to
+> Cloudflare-era files are intentionally dead — see
+> `docs/deployment/CLOUDFLARE_REMOVAL_AUDIT.md` for the mapping.
+
 # HOPPER PHASE 16R.2 — FINANCIAL SAFETY SPECIFICATION & BUDGET CONTROLLER ARCHITECTURE
 
 **Document Status:** REVISED PROPOSAL FOR OWNER REVIEW (Financial Safety & Budget Controller Architecture)  

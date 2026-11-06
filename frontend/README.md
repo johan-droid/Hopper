@@ -49,19 +49,9 @@ Static artifacts will be emitted to `frontend/dist/`.
    - `VITE_API_BASE_URL`: `https://api.hopper.dev`
 4. Deploy! SPA routing rewrites are configured in `vercel.json`.
 
-### Deploying to Cloudflare Pages
-1. Build command: `npm run build`
-2. Build output directory: `dist`
-3. Set Environment Variable:
-   - `VITE_API_BASE_URL`: `https://api.hopper.dev`
-4. Deploy! The SPA rewrite rule is configured in `public/_redirects`.
+### Deploying to Vercel
 
----
+SPA routing, caching and security headers are defined in the repository-root
+`vercel.json`; the full procedure is in
+`docs/deployment/VERCEL_DEPLOYMENT_RUNBOOK.md`.
 
-## 🔒 CORS Configuration on Backend
-
-In production, ensure the backend (`src/server/index.ts`) has the frontend domain whitelisted:
-```bash
-CORS_ALLOWED_ORIGINS=https://app.hopper.dev,https://hopper.dev
-FRONTEND_URL=https://app.hopper.dev
-```

@@ -1,3 +1,10 @@
+> **Historical document (pre-Vercel).** This file describes the retired
+> Cloudflare architecture and is retained as an audit trail. The current
+> architecture is `docs/architecture/VERCEL_TARGET_ARCHITECTURE.md`; operations
+> are in `docs/deployment/VERCEL_DEPLOYMENT_RUNBOOK.md`. Links to
+> Cloudflare-era files are intentionally dead — see
+> `docs/deployment/CLOUDFLARE_REMOVAL_AUDIT.md` for the mapping.
+
 # Hopper — Local Development Guide
 
 Hopper features a dedicated, single-command local development orchestrator that manages prerequisites, Docker infrastructure, backend API, background workers, frontend SPA, and a Cloudflare Quick Tunnel under one supervised terminal session.
