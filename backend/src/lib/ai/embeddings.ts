@@ -45,8 +45,6 @@ export interface EmbeddingOptions {
   apiKey?: string;
   model?: string;
   provider?: string;
-  accountId?: string;
-  workerAiUrl?: string;
 }
 
 /**
@@ -69,61 +67,15 @@ export function projectTo1536Dimensions(rawVector: number[]): number[] {
 }
 
 /**
- * Generates an embedding vector using Cloudflare Workers AI (@cf/baai/bge-base-en-v1.5)
- * or OpenAI text-embedding-3-small, with deterministic unit vector in mock/offline mode.
+ * Generates an embedding vector using OpenAI text-embedding-3-small, with a
+ * deterministic unit vector in mock/offline mode. Dimensions stay at 1536 so
+ * the pgvector column type and HNSW index are unchanged.
  */
 export async function generateEmbedding(
   text: string,
   options: EmbeddingOptions = {}
 ): Promise<number[]> {
   const provider = (options.provider || process.env.AI_PROVIDER || 'openai').toLowerCase();
-
-  // 1. Cloudflare Workers AI Embeddings (Free Tier: 10,000 neurons/day)
-  if (provider === 'cloudflare' || provider === 'workers-ai') {
-    const accountId = options.accountId || process.env.CLOUDFLARE_ACCOUNT_ID;
-    const apiToken = options.apiKey || process.env.CLOUDFLARE_API_TOKEN || process.env.AI_API_KEY;
-    const workerAiUrl = options.workerAiUrl || process.env.CLOUDFLARE_WORKER_AI_URL;
-    const model = options.model || process.env.EMBEDDING_MODEL || '@cf/baai/bge-base-en-v1.5';
-
-    const isMock = !workerAiUrl && (!accountId || !apiToken || apiToken.includes('mock'));
-    if (isMock) {
-      return generateDeterministicEmbedding(text);
-    }
-
-    try {
-      const endpoint = workerAiUrl
-        ? (workerAiUrl.endsWith('/api/ai/embeddings') ? workerAiUrl : `${workerAiUrl.replace(/\/+$/, '')}/api/ai/embeddings`)
-        : `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (apiToken) {
-        headers['Authorization'] = `Bearer ${apiToken}`;
-      }
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          text: [text.slice(0, 4000)],
-        }),
-      });
-
-      if (!response.ok) {
-        console.warn(`[Embeddings] Cloudflare Workers AI error (${response.status}). Using deterministic fallback.`);
-        return generateDeterministicEmbedding(text);
-      }
-
-      const data = (await response.json()) as any;
-      const rawVector = data.result?.data?.[0] || data.data?.[0] || data.result?.[0];
-      if (Array.isArray(rawVector) && rawVector.length > 0) {
-        return projectTo1536Dimensions(rawVector);
-      }
-      return generateDeterministicEmbedding(text);
-    } catch (err: any) {
-      console.warn(`[Embeddings] Cloudflare Workers AI network error (${err.message}). Using deterministic fallback.`);
-      return generateDeterministicEmbedding(text);
-    }
-  }
 
   // 2. OpenAI Embeddings
   const apiKey = options.apiKey || process.env.OPENAI_API_KEY;

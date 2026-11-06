@@ -980,10 +980,10 @@ Doctor status: Ready for development & production building.`}</pre>
 [2/9] Inspecting process conflicts......... [OK]
 [3/9] PostgreSQL (5432) & Redis (6379).... [OK]
 [4/9] Hopper Backend API (3000)........... [OK]
-[5/9] Background Worker (ci-events)........ [OK]
+[5/9] Durable queue worker (postgres)...... [OK]
 [6/9] Frontend SPA (5173)................. [OK]
-[7/9] Cloudflare Quick Tunnel............. [OK]
-Public Webhook: https://*.trycloudflare.com`}</pre>
+[7/9] PostgreSQL + pgvector................. [OK]
+Webhook: http://localhost:3000/api/webhooks/github`}</pre>
           </div>
         </div>
       </section>

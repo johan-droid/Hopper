@@ -874,13 +874,13 @@ Process completed with exit code 6.
 payments.spec.ts:45:7 › Payments › processes card checkout
 Error: Upstream gateway responded with HTTP 502 Bad Gateway
 <html><head><title>502 Bad Gateway</title></head>
-<body><center><h1>502 Bad Gateway</h1></center><hr><center>cloudflare</center></body></html>
+<body><center><h1>502 Bad Gateway</h1></center><hr><center>upstream-cdn</center></body></html>
     at PaymentClient.post (/workspace/src/lib/payment.ts:58:15)
 Process completed with exit code 1.
     `,
     historicalStats: { totalOccurrences: 2, uniquePrsAffected: 1, sameShaRetryPasses: 1, computedFlakinessScore: 60 },
-    groundTruthRootCause: "External infrastructure failure: Cloudflare returned HTTP 502 Bad Gateway indicating payment provider origin server was down.",
-    relevantEvidenceKeywords: ['HTTP 502 Bad Gateway', 'cloudflare', 'PaymentClient.post'],
+    groundTruthRootCause: "External infrastructure failure: the upstream CDN returned HTTP 502 Bad Gateway indicating the payment provider origin server was down.",
+    relevantEvidenceKeywords: ['HTTP 502 Bad Gateway', 'PaymentClient.post'],
     acceptableAlternatives: ['Third-party provider outage or reverse proxy connection failure'],
     recommendedRemediation: 'Stub payment gateway in CI using MSW or Playwright route mock.',
     difficulty: 'standard',
