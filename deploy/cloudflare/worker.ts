@@ -17,6 +17,7 @@ export interface Env {
   AI?: any;
   AI_MODEL?: string;
   EMBEDDING_MODEL?: string;
+  ASSETS?: any;
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -57,7 +58,27 @@ export default {
     const edgeCountry = (cf.country as string) || 'UNKNOWN';
     const isIndianSubcontinent = ['IN', 'BD', 'LK', 'NP', 'PK'].includes(edgeCountry);
 
-    // 2.1 Root Gateway Info Endpoint (serves clean JSON instead of failing on unconfigured origin)
+    // 2.0 Web Application Static Asset & Single Page Application Routing
+    const acceptHeader = request.headers.get('accept') || '';
+    const wantsJson = acceptHeader.includes('application/json') || url.pathname.startsWith('/api');
+
+    if (env.ASSETS && !wantsJson) {
+      try {
+        const assetResponse = await env.ASSETS.fetch(request);
+        if (assetResponse.status !== 404) {
+          return assetResponse;
+        }
+        // Fallback for client-side SPA history routing: serve /index.html on 404 for text/html
+        if (acceptHeader.includes('text/html')) {
+          const indexUrl = new URL('/index.html', request.url);
+          return await env.ASSETS.fetch(new Request(indexUrl.toString(), request));
+        }
+      } catch (assetErr) {
+        console.warn('[Assets] Error serving asset:', assetErr);
+      }
+    }
+
+    // 2.1 Root Gateway Info Endpoint (serves clean JSON for API clients or when no assets bound)
     if (url.pathname === '/' || url.pathname === '/api') {
       return new Response(
         JSON.stringify({

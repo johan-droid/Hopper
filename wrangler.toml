@@ -8,6 +8,11 @@ compatibility_flags = ["nodejs_compat"]
 [ai]
 binding = "AI"
 
+# Static Assets (Hopper Web Dashboard)
+[assets]
+directory = "frontend/dist"
+binding = "ASSETS"
+
 # Operational variables
 [vars]
 ENVIRONMENT = "production"
