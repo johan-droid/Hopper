@@ -59,7 +59,7 @@ jobs:
 
           # 2. Verify all 11 tables have FORCE ROW LEVEL SECURITY enabled
           UNSECURED_TABLES=$(psql -h localhost -p 5432 -U postgres -d hopper_db -tAc \
-            "SELECT count(*) FROM pg_tables WHERE schemaname = 'public' AND (rowsecurity = false OR forcerowsecurity = false);")
+            "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND (c.relrowsecurity = false OR c.relforcerowsecurity = false);")
           if [ "$UNSECURED_TABLES" -ne 0 ]; then
             echo "ERROR: Found $UNSECURED_TABLES public tables without FORCE ROW LEVEL SECURITY enabled!"
             exit 1
