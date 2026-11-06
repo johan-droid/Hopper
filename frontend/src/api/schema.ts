@@ -1,33 +1,58 @@
 import { z } from 'zod';
 
-// 1. Health Telemetry Schema
+/**
+ * Runtime contracts for every response the frontend consumes.
+ *
+ * These mirror the Express handlers. Optional/passthrough fields are deliberate:
+ * the backend may add fields, and a stricter schema would turn an additive
+ * change into a broken screen. Fields the UI depends on stay required.
+ */
+
+// ---------------------------------------------------------------------------
+// 1. Health
+// ---------------------------------------------------------------------------
+
+const DependencyHealthSchema = z
+  .object({
+    status: z.string().optional(),
+    isHealthy: z.boolean().optional(),
+    latencyMs: z.number().optional(),
+    poolTotal: z.number().optional(),
+    poolIdle: z.number().optional(),
+    pgVersion: z.string().optional(),
+    hasPgvector: z.boolean().optional(),
+    backend: z.string().optional(),
+    enabled: z.boolean().optional(),
+    pending: z.number().optional(),
+    failed: z.number().optional(),
+  })
+  .passthrough();
+
 export const HealthSchema = z.object({
   status: z.string(),
   service: z.string().optional(),
   version: z.string().optional(),
+  environment: z.string().optional(),
+  region: z.string().nullable().optional(),
   timestamp: z.string().optional(),
   uptimeSeconds: z.number().optional(),
-  dependencies: z.object({
-    database: z.object({
-      status: z.string().optional(),
-      isHealthy: z.boolean().optional(),
-      poolTotal: z.number().optional(),
-      poolIdle: z.number().optional(),
-      latencyMs: z.number().optional(),
-      pgVersion: z.string().optional(),
-      hasPgvector: z.boolean().optional(),
-    }).passthrough(),
-    redis: z.object({
-      status: z.string().optional(),
-      isHealthy: z.boolean().optional(),
-      connected: z.boolean().optional(),
-      latencyMs: z.number().optional(),
-    }).passthrough(),
-  }).passthrough(),
+  dependencies: z
+    .object({
+      // Coordination and queue replaced Redis in the Vercel-native architecture.
+      database: DependencyHealthSchema.optional(),
+      coordination: DependencyHealthSchema.optional(),
+      queue: DependencyHealthSchema.optional(),
+      redis: DependencyHealthSchema.optional(),
+    })
+    .passthrough()
+    .optional(),
 });
 export type HealthData = z.infer<typeof HealthSchema>;
 
-// 2. Flaky Leaderboard Item Schema
+// ---------------------------------------------------------------------------
+// 2. Dashboard / flaky leaderboard
+// ---------------------------------------------------------------------------
+
 export const FlakyLeaderboardItemSchema = z.object({
   rank: z.number(),
   identifier: z.string(),
@@ -40,17 +65,19 @@ export const FlakyLeaderboardItemSchema = z.object({
 });
 export type FlakyLeaderboardItem = z.infer<typeof FlakyLeaderboardItemSchema>;
 
-// 3. Organization Dashboard Schema
 export const DashboardSchema = z.object({
   orgSlug: z.string(),
-  plan: z.enum(['free', 'pro_dev', 'team']).or(z.string()),
+  plan: z.string(),
   monthlyRunsLimit: z.number(),
   runsUsedThisPeriod: z.number(),
   flakyTestLeaderboard: z.array(FlakyLeaderboardItemSchema),
 });
 export type DashboardData = z.infer<typeof DashboardSchema>;
 
-// 4. Signature Detail Schema
+// ---------------------------------------------------------------------------
+// 3. Failure signatures
+// ---------------------------------------------------------------------------
+
 export const SignatureTimelineItemSchema = z.object({
   githubRunId: z.union([z.string(), z.number()]),
   githubJobId: z.union([z.string(), z.number()]).optional(),
@@ -87,11 +114,14 @@ export const SignatureDetailSchema = z.object({
 });
 export type SignatureDetail = z.infer<typeof SignatureDetailSchema>;
 
-// 5. Ad-Hoc Diagnosis Request & Response Schema
+// ---------------------------------------------------------------------------
+// 4. Ad-hoc diagnosis
+// ---------------------------------------------------------------------------
+
 export const AdhocDiagnoseRequestSchema = z.object({
-  rawLog: z.string().min(1, 'Log content cannot be empty'),
-  jobName: z.string().default('build'),
-  stepName: z.string().default('test'),
+  rawLog: z.string().trim().min(1, 'Paste a CI log to diagnose').max(300_000, 'Logs are capped at 300 KB'),
+  jobName: z.string().trim().min(1).max(200).default('build'),
+  stepName: z.string().trim().min(1).max(200).default('test'),
   modifiedFiles: z.array(z.string()).default([]),
 });
 export type AdhocDiagnoseRequest = z.infer<typeof AdhocDiagnoseRequestSchema>;
@@ -101,30 +131,41 @@ export const AdhocDiagnoseResponseSchema = z.object({
   detectedFramework: z.string().optional(),
   detectedExitCode: z.number().nullable().optional(),
   flakinessScore: z.number(),
-  diagnosis: z.object({
-    root_cause_clues: z.string(),
-    likely_flaky_test: z.object({
-      is_flaky: z.boolean().optional(),
-      is_likely_flaky: z.boolean().optional(),
-      confidence: z.number().optional(),
-      test_name: z.string().nullable().optional(),
-      reasoning: z.string().optional(),
-    }).passthrough(),
-    relevant_log_lines: z.array(
-      z.object({
-        line_number: z.number(),
-        content: z.string(),
-        explanation: z.string().optional(),
-      })
-    ),
-    recommended_next_checks: z.array(z.string()).optional().default([]),
-    suggested_next_check: z.string().optional(),
-    local_repro_command: z.string().nullable().optional(),
-  }).passthrough(),
+  diagnosis: z
+    .object({
+      root_cause_clues: z.string(),
+      likely_flaky_test: z
+        .object({
+          is_flaky: z.boolean().optional(),
+          is_likely_flaky: z.boolean().optional(),
+          confidence: z.number().optional(),
+          test_name: z.string().nullable().optional(),
+          reasoning: z.string().optional(),
+        })
+        .passthrough()
+        .optional(),
+      relevant_log_lines: z.array(
+        z.object({
+          line_number: z.number(),
+          content: z.string(),
+          explanation: z.string().optional(),
+        })
+      ),
+      recommended_next_checks: z.array(z.string()).optional().default([]),
+      suggested_next_check: z.string().optional(),
+      local_repro_command: z.string().nullable().optional(),
+    })
+    .passthrough(),
+  // Present when the deterministic provider answered instead of a live model.
+  provider: z.string().optional(),
+  isFallback: z.boolean().optional(),
 });
 export type AdhocDiagnoseResponse = z.infer<typeof AdhocDiagnoseResponseSchema>;
 
-// 6. Billing Checkout Schema
+// ---------------------------------------------------------------------------
+// 5. Billing
+// ---------------------------------------------------------------------------
+
 export const BillingCheckoutRequestSchema = z.object({
   orgId: z.string(),
   orgLogin: z.string(),
@@ -136,18 +177,24 @@ export type BillingCheckoutRequest = z.infer<typeof BillingCheckoutRequestSchema
 
 export const BillingCheckoutResponseSchema = z.object({
   id: z.string().optional(),
+  url: z.string().optional(),
   checkoutUrl: z.string().optional(),
   status: z.string().optional(),
+  code: z.string().optional(),
+  message: z.string().optional(),
   mock: z.boolean().optional(),
 });
 export type BillingCheckoutResponse = z.infer<typeof BillingCheckoutResponseSchema>;
 
-// 7. Workspace & User Profile Schemas
+// ---------------------------------------------------------------------------
+// 6. Workspaces and profile
+// ---------------------------------------------------------------------------
+
 export const WorkspaceMemberSchema = z.object({
   id: z.string(),
   workspace_id: z.string(),
   user_id: z.string(),
-  role: z.enum(['owner', 'admin', 'developer', 'member', 'viewer']).or(z.string()),
+  role: z.string(),
   status: z.string().optional(),
   created_at: z.string().optional(),
   username: z.string().nullable().optional(),
@@ -159,7 +206,7 @@ export type WorkspaceMember = z.infer<typeof WorkspaceMemberSchema>;
 export const WorkspaceSchema = z.object({
   id: z.string(),
   name: z.string(),
-  type: z.enum(['personal', 'organization']).or(z.string()),
+  type: z.string(),
   owner_id: z.string().nullable().optional(),
   parent_workspace_id: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
@@ -182,7 +229,10 @@ export const UserProfileSchema = z.object({
 });
 export type UserProfile = z.infer<typeof UserProfileSchema>;
 
-// 8. Repository & CI Failure History Schemas
+// ---------------------------------------------------------------------------
+// 7. Repositories and failures
+// ---------------------------------------------------------------------------
+
 export const RepositorySchema = z.object({
   id: z.string(),
   org_id: z.string(),
@@ -213,7 +263,10 @@ export const WorkflowFailureSchema = z.object({
 });
 export type WorkflowFailure = z.infer<typeof WorkflowFailureSchema>;
 
-// 9. Live Diagnosis History Schema
+// ---------------------------------------------------------------------------
+// 8. Diagnosis history
+// ---------------------------------------------------------------------------
+
 export const DiagnosisHistoryItemSchema = z.object({
   id: z.string(),
   failureId: z.string().optional(),
@@ -225,7 +278,7 @@ export const DiagnosisHistoryItemSchema = z.object({
   branch: z.string().nullable().optional(),
   prNumber: z.number().nullable().optional(),
   signatureHash: z.string().nullable().optional(),
-  errorCategory: z.string().default('test_assertion'),
+  errorCategory: z.string().default('unknown'),
   flakinessScore: z.number().default(0),
   rootCauseClues: z.string(),
   likelyFlakyTest: z.string().nullable().optional(),

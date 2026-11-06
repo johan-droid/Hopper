@@ -2,104 +2,116 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { api } from './client';
 import { AdhocDiagnoseRequest, BillingCheckoutRequest } from './schema';
 
-export const QUERY_KEYS = {
+/**
+ * Query keys always carry the tenant/user scope. Signing out clears the whole
+ * cache (see `useSignOut`), so a second account on the same browser cannot read
+ * the first account's cached pages.
+ */
+export const queryKeys = {
   health: ['health'] as const,
   dashboard: (orgSlug: string) => ['dashboard', orgSlug] as const,
-  signature: (sigId: string) => ['signature', sigId] as const,
-  workspaces: ['workspaces'] as const,
-  userProfile: ['userProfile'] as const,
-  repositories: (workspaceId?: string) => ['repositories', workspaceId] as const,
-  repoFailures: (repoId: string) => ['repoFailures', repoId] as const,
+  signature: (signatureId: string) => ['signature', signatureId] as const,
+  workspaces: (userId: string | null) => ['workspaces', userId] as const,
+  profile: (userId: string | null) => ['profile', userId] as const,
+  repositories: (workspaceId: string | null) => ['repositories', workspaceId] as const,
+  repoFailures: (repoId: string) => ['repo-failures', repoId] as const,
+  diagnoses: (workspaceId: string | null) => ['diagnoses', workspaceId] as const,
+  members: (workspaceId: string | null) => ['members', workspaceId] as const,
 };
-
-export function useRepositoriesQuery(workspaceId?: string) {
-  return useQuery({
-    queryKey: QUERY_KEYS.repositories(workspaceId),
-    queryFn: () => api.listRepositories(workspaceId),
-    staleTime: 30000,
-  });
-}
-
-export function useRepoFailuresQuery(repoId?: string) {
-  return useQuery({
-    queryKey: QUERY_KEYS.repoFailures(repoId || ''),
-    queryFn: () => api.getRepositoryFailures(repoId!),
-    enabled: Boolean(repoId),
-    staleTime: 30000,
-  });
-}
 
 export function useHealthQuery() {
   return useQuery({
-    queryKey: QUERY_KEYS.health,
+    queryKey: queryKeys.health,
     queryFn: () => api.getHealth(),
-    refetchInterval: 15000,
-    retry: 2,
+    // Health is cheap and drives the global status indicator.
+    refetchInterval: 30_000,
+    retry: 1,
+    staleTime: 15_000,
   });
 }
 
-export function useDashboardQuery(orgSlug: string) {
+export function useWorkspacesQuery(userId: string | null, enabled = true) {
   return useQuery({
-    queryKey: QUERY_KEYS.dashboard(orgSlug),
-    queryFn: () => api.getDashboard(orgSlug),
-    staleTime: 30000,
-    retry: 2,
+    queryKey: queryKeys.workspaces(userId),
+    queryFn: () => api.listWorkspaces(),
+    enabled: enabled && Boolean(userId),
+    staleTime: 60_000,
   });
 }
 
-export function useSignatureQuery(sigId: string | null) {
+export function useUserProfileQuery(userId: string | null, enabled = true) {
   return useQuery({
-    queryKey: QUERY_KEYS.signature(sigId || ''),
-    queryFn: () => api.getSignature(sigId!),
-    enabled: Boolean(sigId),
-    staleTime: 60000,
+    queryKey: queryKeys.profile(userId),
+    queryFn: () => api.getUserProfile(),
+    enabled: enabled && Boolean(userId),
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+export function useDashboardQuery(orgSlug: string | null) {
+  return useQuery({
+    queryKey: queryKeys.dashboard(orgSlug ?? ''),
+    queryFn: () => api.getDashboard(orgSlug!),
+    enabled: Boolean(orgSlug),
+    staleTime: 30_000,
+    retry: 1,
+  });
+}
+
+export function useRepositoriesQuery(workspaceId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.repositories(workspaceId),
+    queryFn: () => api.listRepositories(workspaceId ?? undefined),
+    enabled: Boolean(workspaceId),
+    staleTime: 30_000,
+  });
+}
+
+export function useRepoFailuresQuery(repoId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.repoFailures(repoId ?? ''),
+    queryFn: () => api.getRepositoryFailures(repoId!),
+    enabled: Boolean(repoId),
+    staleTime: 20_000,
+  });
+}
+
+export function useSignatureQuery(signatureId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.signature(signatureId ?? ''),
+    queryFn: () => api.getSignature(signatureId!),
+    enabled: Boolean(signatureId),
+    staleTime: 60_000,
+  });
+}
+
+export function useDiagnosisHistoryQuery(workspaceId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.diagnoses(workspaceId),
+    queryFn: () => api.listDiagnosisHistory(workspaceId ?? undefined),
+    enabled: Boolean(workspaceId),
+    staleTime: 30_000,
+  });
+}
+
+export function useWorkspaceMembersQuery(workspaceId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.members(workspaceId),
+    queryFn: () => api.getWorkspaceMembers(workspaceId!),
+    enabled: Boolean(workspaceId),
+    staleTime: 60_000,
   });
 }
 
 export function useAdhocDiagnoseMutation() {
   return useMutation({
-    mutationFn: (data: AdhocDiagnoseRequest) => api.diagnoseAdhoc(data),
+    mutationFn: (input: AdhocDiagnoseRequest) => api.diagnoseAdhoc(input),
   });
 }
 
 export function useCheckoutMutation() {
   return useMutation({
-    mutationFn: (data: BillingCheckoutRequest) => api.createCheckoutSession(data),
-  });
-}
-
-export function useWorkspacesQuery(enabled = true) {
-  return useQuery({
-    queryKey: QUERY_KEYS.workspaces,
-    queryFn: () => api.listWorkspaces(),
-    enabled,
-    staleTime: 30000,
-  });
-}
-
-export function useWorkspaceMembersQuery(workspaceId?: string) {
-  return useQuery({
-    queryKey: ['workspaceMembers', workspaceId],
-    queryFn: () => api.getWorkspaceMembers(workspaceId!),
-    enabled: Boolean(workspaceId),
-    staleTime: 30000,
-  });
-}
-
-export function useUserProfileQuery(enabled = true) {
-  return useQuery({
-    queryKey: QUERY_KEYS.userProfile,
-    queryFn: () => api.getUserProfile(),
-    enabled,
-    staleTime: 60000,
-  });
-}
-
-export function useDiagnosisHistoryQuery(workspaceId?: string) {
-  return useQuery({
-    queryKey: ['diagnosisHistory', workspaceId],
-    queryFn: () => api.listDiagnosisHistory(workspaceId),
-    enabled: Boolean(workspaceId),
-    staleTime: 15000,
+    mutationFn: (input: BillingCheckoutRequest) => api.createCheckoutSession(input),
   });
 }
