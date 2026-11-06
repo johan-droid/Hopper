@@ -95,7 +95,7 @@ echo "==========================================================================
 if [ "$FAILED_CHECKS" -gt 0 ]; then
   # If remote environment has not been provisioned with custom domains yet, log warning
   if [ "$ENV_NAME" = "staging" ] || [ "$ENV_NAME" = "production" ]; then
-    echo "Notice: Deployment target ($APP_URL) is pending remote Cloudflare custom domain mapping."
+    echo "Notice: Deployment target ($APP_URL) is pending DNS/custom-domain mapping on Vercel."
     echo "All local verification checks passed. Proceeding with recorded advisory status."
     exit 0
   else

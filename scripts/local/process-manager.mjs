@@ -120,15 +120,6 @@ export function classifyProcess(pid) {
     return 'frontend';
   }
 
-  // 5. Cloudflare Tunnel for Hopper Backend
-  if (
-    cmdline.includes('cloudflared') &&
-    cmdline.includes('tunnel') &&
-    (cmdline.includes(`localhost:${PORTS.backend}`) || cmdline.includes(`127.0.0.1:${PORTS.backend}`))
-  ) {
-    return 'tunnel';
-  }
-
   return null;
 }
 

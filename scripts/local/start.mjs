@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
  * Hopper — Single-Command Local Development Orchestrator
- * Coordinates prerequisite verification, conflict resolution, infrastructure health,
- * backend API, background workers, frontend SPA, and Cloudflare Quick Tunnel.
+ *
+ * `npm run dev` starts PostgreSQL (Docker), migrations, the API, the durable
+ * queue worker and the Vite frontend, with dependency readiness gates and
+ * safe cleanup. No Cloudflare account, Wrangler or cloudflared is required.
  */
 
 import * as fs from 'node:fs';
@@ -15,10 +17,7 @@ import {
   PORTS,
   URLS,
   TIMEOUTS,
-  BACKEND_ENV,
-  FRONTEND_ENV,
-  SESSION_FILE,
-  LOCK_FILE,
+  LOCAL_RUNTIME_ENV,
 } from './config.mjs';
 import {
   printBanner,
@@ -27,12 +26,10 @@ import {
   printStepWarning,
   printStepFailed,
   printDashboard,
-  log,
   orchestratorLog,
 } from './logger.mjs';
 import {
   checkPostgresHealth,
-  checkRedisHealth,
   checkBackendHealth,
   verifyWebhookRoute,
   checkFrontendHealth,
@@ -48,127 +45,87 @@ import {
   terminateProcess,
   spawnSupervisedProcess,
 } from './process-manager.mjs';
-import { startCloudflareTunnel } from './tunnel-manager.mjs';
 
+const TOTAL_STEPS = 8;
 let isShuttingDown = false;
-const activeProcesses = {
-  backend: null,
-  worker: null,
-  frontend: null,
-  tunnel: null,
-};
-const infrastructureState = {
-  postgresManaged: false,
-  redisManaged: false,
-};
+
+const activeProcesses = { backend: null, worker: null, frontend: null };
+const infrastructureState = { postgresManaged: false };
 
 async function gracefulShutdown(signal = 'SIGINT') {
   if (isShuttingDown) return;
   isShuttingDown = true;
 
-  console.log(`\n\n[orchestrator] Received ${signal}. Initiating graceful shutdown of Hopper local dev environment...`);
+  console.log(`\n\n[orchestrator] ${signal} received; stopping Hopper local dev...`);
 
-  // 1. Stop Cloudflare Tunnel
-  if (activeProcesses.tunnel) {
+  for (const name of ['frontend', 'backend', 'worker']) {
+    const proc = activeProcesses[name];
+    if (!proc) continue;
     try {
-      orchestratorLog('Stopping Cloudflare Quick Tunnel...');
-      await activeProcesses.tunnel.stop();
+      orchestratorLog(`Stopping ${name}...`);
+      await proc.stop();
     } catch (err) {
-      orchestratorLog(`Tunnel shutdown warning: ${err.message}`, 'warn');
+      orchestratorLog(`${name} shutdown warning: ${err.message}`, 'warn');
     }
   }
 
-  // 2. Stop Frontend
-  if (activeProcesses.frontend) {
-    try {
-      orchestratorLog('Stopping Frontend dev server...');
-      await activeProcesses.frontend.stop();
-    } catch (err) {
-      orchestratorLog(`Frontend shutdown warning: ${err.message}`, 'warn');
-    }
+  if (infrastructureState.postgresManaged) {
+    orchestratorLog('PostgreSQL container and data volume preserved for the next session.');
   }
 
-  // 3. Stop Backend
-  if (activeProcesses.backend) {
-    try {
-      orchestratorLog('Stopping Backend server...');
-      await activeProcesses.backend.stop();
-    } catch (err) {
-      orchestratorLog(`Backend shutdown warning: ${err.message}`, 'warn');
-    }
-  }
-
-  // 4. Stop Background Worker
-  if (activeProcesses.worker) {
-    try {
-      orchestratorLog('Stopping Background Worker...');
-      await activeProcesses.worker.stop();
-    } catch (err) {
-      orchestratorLog(`Worker shutdown warning: ${err.message}`, 'warn');
-    }
-  }
-
-  // 5. Infrastructure handling: Leave pre-existing instances running!
-  // If explicitly started by this orchestrator, we preserve data volumes.
-  if (infrastructureState.postgresManaged || infrastructureState.redisManaged) {
-    orchestratorLog('Note: Database and Redis containers/volumes preserved for next session.');
-  }
-
-  // 6. Release Lockfile & Clear Session Metadata
   releaseLock();
   clearSession();
-
-  orchestratorLog('Hopper local development environment shut down cleanly.', 'success');
+  orchestratorLog('Hopper local development environment stopped.', 'success');
   process.exit(0);
 }
 
-// Register signal handlers
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
+function ensureEnvFile(dir, label) {
+  const envPath = path.join(dir, '.env');
+  const examplePath = path.join(dir, '.env.example');
+  if (!fs.existsSync(envPath) && fs.existsSync(examplePath)) {
+    fs.copyFileSync(examplePath, envPath);
+    orchestratorLog(`Created ${label}/.env from ${label}/.env.example`);
+  }
+}
+
+function run(command, options = {}) {
+  return execSync(command, { cwd: REPO_ROOT, stdio: 'pipe', encoding: 'utf8', ...options });
+}
+
 async function main() {
   printBanner();
-
   const statusList = [];
 
-  // ============================================================================
-  // Step 1: Check Prerequisites & Acquire Lock
-  // ============================================================================
-  printStep(1, 9, 'Checking prerequisites & lockfile');
+  // ---------------------------------------------------------------- 1. prereqs
+  printStep(1, TOTAL_STEPS, 'Checking prerequisites');
 
-  // Verify Node.js version
   const nodeMajor = parseInt(process.version.slice(1).split('.')[0], 10);
-  if (nodeMajor < 18) {
-    printStepFailed(`Node.js 18+ required. Current version: ${process.version}`);
+  if (nodeMajor < 20) {
+    printStepFailed(`Node.js 20+ required. Current: ${process.version}`);
     process.exit(1);
   }
 
-  // Verify Docker availability
   let hasDocker = false;
   try {
-    execSync('docker --version', { stdio: 'ignore' });
+    run('docker --version');
+    run('docker compose version');
     hasDocker = true;
   } catch {
-    printStepFailed('Docker is required for Hopper local infrastructure (Postgres & Redis).');
+    printStepFailed('Docker + Docker Compose are required for local PostgreSQL.');
     process.exit(1);
   }
 
-  // Ensure .env files exist
-  const backendEnvPath = path.join(BACKEND_DIR, '.env');
-  const backendExamplePath = path.join(BACKEND_DIR, '.env.example');
-  if (!fs.existsSync(backendEnvPath) && fs.existsSync(backendExamplePath)) {
-    fs.copyFileSync(backendExamplePath, backendEnvPath);
-    orchestratorLog('Created backend/.env from backend/.env.example');
+  ensureEnvFile(BACKEND_DIR, 'backend');
+  ensureEnvFile(FRONTEND_DIR, 'frontend');
+
+  if (!fs.existsSync(path.join(REPO_ROOT, 'node_modules'))) {
+    printStepFailed("Dependencies are missing. Run 'npm install' first.");
+    process.exit(1);
   }
 
-  const frontendEnvPath = path.join(FRONTEND_DIR, '.env');
-  const frontendExamplePath = path.join(FRONTEND_DIR, '.env.example');
-  if (!fs.existsSync(frontendEnvPath) && fs.existsSync(frontendExamplePath)) {
-    fs.copyFileSync(frontendExamplePath, frontendEnvPath);
-    orchestratorLog('Created frontend/.env from frontend/.env.example');
-  }
-
-  // Acquire orchestrator process lock
   try {
     acquireLock();
   } catch (err) {
@@ -176,212 +133,172 @@ async function main() {
     process.exit(1);
   }
 
-  printStepSuccess(`Node ${process.version}, Docker verified, lock acquired`);
-  statusList.push({ name: 'Environment validation', status: 'ok', detail: `Node ${process.version}` });
+  printStepSuccess(`Node ${process.version}, Docker ${hasDocker ? 'ready' : 'missing'}, lock acquired`);
+  statusList.push({ name: 'Environment', status: 'ok', detail: `Node ${process.version}` });
 
-  // ============================================================================
-  // Step 2: Detect & Safely Resolve Process Conflicts
-  // ============================================================================
-  printStep(2, 9, 'Inspecting process tree & port conflicts');
+  // ------------------------------------------------------- 2. port conflicts
+  printStep(2, TOTAL_STEPS, 'Inspecting ports and stale processes');
 
-  // Check Backend Port (3000)
-  const backendConflict = detectPortConflict(PORTS.backend, 'Backend');
-  if (backendConflict.hasConflict) {
-    if (backendConflict.isHopper) {
-      orchestratorLog(`Found existing Hopper backend on port ${PORTS.backend} (PID: ${backendConflict.pid}). Terminating safely...`);
-      await terminateProcess(backendConflict.pid, { label: 'stale Hopper backend' });
+  for (const [port, name] of [
+    [PORTS.backend, 'Backend'],
+    [PORTS.frontend, 'Frontend'],
+  ]) {
+    const conflict = detectPortConflict(port, name);
+    if (!conflict.hasConflict) continue;
+
+    if (conflict.isHopper) {
+      orchestratorLog(`Reclaiming port ${port} from stale Hopper ${conflict.component} (PID ${conflict.pid})`);
+      await terminateProcess(conflict.pid, { label: `stale ${conflict.component}` });
     } else {
-      printStepFailed(backendConflict.error);
+      printStepFailed(conflict.error);
       releaseLock();
       process.exit(1);
     }
   }
 
-  // Check Frontend Port (5173)
-  const frontendConflict = detectPortConflict(PORTS.frontend, 'Frontend');
-  if (frontendConflict.hasConflict) {
-    if (frontendConflict.isHopper) {
-      orchestratorLog(`Found existing Hopper frontend on port ${PORTS.frontend} (PID: ${frontendConflict.pid}). Terminating safely...`);
-      await terminateProcess(frontendConflict.pid, { label: 'stale Hopper frontend' });
-    } else {
-      printStepFailed(frontendConflict.error);
-      releaseLock();
-      process.exit(1);
-    }
-  }
-
-  // Scan for any dangling Hopper worker or tunnel processes
-  const lingering = findHopperProcesses();
-  for (const proc of lingering) {
-    if (proc.type === 'worker' || proc.type === 'tunnel' || proc.type === 'backend') {
-      orchestratorLog(`Found orphaned Hopper ${proc.type} (PID: ${proc.pid}). Terminating safely...`);
+  for (const proc of findHopperProcesses()) {
+    if (['worker', 'backend', 'frontend'].includes(proc.type)) {
+      orchestratorLog(`Terminating orphaned ${proc.type} (PID ${proc.pid})`);
       await terminateProcess(proc.pid, { label: `orphaned ${proc.type}` });
     }
   }
 
-  printStepSuccess('No conflicting processes; ports 3000 & 5173 available');
+  const pgConflict = detectPortConflict(PORTS.postgres, 'PostgreSQL');
+  if (pgConflict.hasConflict && !pgConflict.isHopper) {
+    orchestratorLog(
+      `Port ${PORTS.postgres} is already in use (PID ${pgConflict.pid}); reusing that PostgreSQL instance.`,
+      'warn'
+    );
+  }
 
-  // ============================================================================
-  // Step 3 & 4: Start & Verify Local Infrastructure (Postgres & Redis)
-  // ============================================================================
-  printStep(3, 9, 'Verifying PostgreSQL & Redis infrastructure');
+  printStepSuccess(`Ports ${PORTS.backend} and ${PORTS.frontend} available`);
+  statusList.push({ name: 'Ports', status: 'ok', detail: `${PORTS.backend}, ${PORTS.frontend}` });
+
+  // ----------------------------------------------------------- 3. PostgreSQL
+  printStep(3, TOTAL_STEPS, 'Starting PostgreSQL + pgvector');
 
   let pgHealth = await checkPostgresHealth(PORTS.postgres);
-  let redisHealth = await checkRedisHealth(PORTS.redis);
-
-  if (!pgHealth.healthy || !redisHealth.healthy) {
-    orchestratorLog('Starting missing infrastructure containers via docker compose...');
+  if (!pgHealth.healthy) {
+    orchestratorLog('Starting hopper-postgres via docker compose...');
     try {
-      execSync('docker compose up -d hopper-postgres hopper-redis', {
-        cwd: REPO_ROOT,
-        stdio: 'pipe',
-      });
-      infrastructureState.postgresManaged = !pgHealth.healthy;
-      infrastructureState.redisManaged = !redisHealth.healthy;
-    } catch (composeErr) {
-      printStepFailed(`Failed to start docker-compose services: ${composeErr.message}`);
+      run('docker compose up -d hopper-postgres');
+      infrastructureState.postgresManaged = true;
+    } catch (err) {
+      printStepFailed(`docker compose failed: ${err.message}`);
       releaseLock();
       process.exit(1);
     }
   } else {
-    orchestratorLog('Reusing pre-existing healthy PostgreSQL and Redis instances.');
+    orchestratorLog('Reusing the already-running PostgreSQL instance.');
   }
 
-  // Wait for PostgreSQL readiness
   try {
-    await waitForCondition(() => checkPostgresHealth(PORTS.postgres), TIMEOUTS.infraReadyMs, 500, 'PostgreSQL');
+    await waitForCondition(
+      () => checkPostgresHealth(PORTS.postgres),
+      TIMEOUTS.infraReadyMs,
+      500,
+      'PostgreSQL'
+    );
+    printStepSuccess(`PostgreSQL healthy on port ${PORTS.postgres}`);
     statusList.push({ name: 'PostgreSQL', status: 'ok', detail: `port ${PORTS.postgres}` });
   } catch (err) {
-    printStepFailed(`PostgreSQL failed health check: ${err.message}`);
+    printStepFailed(err.message);
     releaseLock();
     process.exit(1);
   }
 
-  // Wait for Redis readiness
+  // ------------------------------------------------------------ 4. migrations
+  printStep(4, TOTAL_STEPS, 'Applying database migrations');
   try {
-    await waitForCondition(() => checkRedisHealth(PORTS.redis), TIMEOUTS.infraReadyMs, 500, 'Redis');
-    statusList.push({ name: 'Redis', status: 'ok', detail: `port ${PORTS.redis}` });
+    const output = run('npm --prefix backend run migrate', { timeout: TIMEOUTS.migrationTimeoutMs });
+    const summary = output.trim().split('\n').filter(Boolean).slice(-1)[0] || 'applied';
+    printStepSuccess(summary.slice(0, 160));
+    statusList.push({ name: 'Migrations', status: 'ok', detail: 'up to date' });
   } catch (err) {
-    printStepFailed(`Redis failed health check: ${err.message}`);
-    releaseLock();
-    process.exit(1);
+    printStepFailed(`Migration failed: ${(err.stdout || err.message || '').toString().slice(0, 600)}`);
+    await gracefulShutdown('MIGRATION_FAILURE');
   }
 
-  printStepSuccess('PostgreSQL & Redis healthy');
-
-  // ============================================================================
-  // Step 5 & 6: Start & Supervise Backend API Server
-  // ============================================================================
-  printStep(4, 9, 'Starting Hopper Backend API Server');
-
-  const onChildFatal = async ({ name, pid, code, signal, error }) => {
+  const onChildFatal = async ({ name, pid, code, error }) => {
     if (isShuttingDown) return;
-    orchestratorLog(`CRITICAL: Component ${name} [PID: ${pid}] crashed unexpectedly (code: ${code})!`, 'error');
-    if (error) orchestratorLog(`Crash details: ${error.message}`, 'error');
+    orchestratorLog(`CRITICAL: ${name} [PID ${pid}] exited unexpectedly (code ${code})`, 'error');
+    if (error) orchestratorLog(error.message, 'error');
     await gracefulShutdown('CHILD_CRASH');
   };
 
-  // Launch Backend child process
+  // -------------------------------------------------------------- 5. backend
+  printStep(5, TOTAL_STEPS, 'Starting API server');
   activeProcesses.backend = spawnSupervisedProcess({
     name: 'backend',
     command: 'npm',
     args: ['--prefix', 'backend', 'run', 'dev'],
     cwd: REPO_ROOT,
+    env: LOCAL_RUNTIME_ENV,
     onFatalExit: onChildFatal,
   });
 
-  printStep(5, 9, 'Waiting for Backend API health readiness');
   try {
-    const healthResult = await waitForCondition(
+    const health = await waitForCondition(
       () => checkBackendHealth(URLS.backendHealth),
       TIMEOUTS.backendReadyMs,
       500,
       'Backend API'
     );
-    printStepSuccess(`API Gateway healthy (${healthResult.detail})`);
-    statusList.push({ name: 'Backend', status: 'ok', detail: `port ${PORTS.backend}` });
+    printStepSuccess(`API healthy (${health.detail})`);
+    statusList.push({ name: 'API', status: 'ok', detail: `port ${PORTS.backend}` });
   } catch (err) {
-    printStepFailed(`Backend health check failed: ${err.message}`);
+    printStepFailed(err.message);
     await gracefulShutdown('BACKEND_INIT_FAILURE');
   }
 
-  // Verify GitHub Webhook route
-  const webhookVerification = await verifyWebhookRoute(URLS.backend, URLS.webhookPath);
-  if (!webhookVerification.verified) {
-    printStepWarning(`Webhook route verification: ${webhookVerification.detail}`);
+  const webhook = await verifyWebhookRoute(URLS.backend, URLS.webhookPath);
+  if (!webhook.verified) {
+    printStepWarning(`Webhook route probe: ${webhook.detail}`);
   }
 
-  // ============================================================================
-  // Step 7: Start Background Event Worker
-  // ============================================================================
-  printStep(6, 9, 'Starting Background BullMQ Event Worker');
-
+  // --------------------------------------------------------------- 6. worker
+  printStep(6, TOTAL_STEPS, 'Starting durable queue worker');
   activeProcesses.worker = spawnSupervisedProcess({
     name: 'worker',
     command: 'npm',
     args: ['--prefix', 'backend', 'run', 'worker'],
     cwd: REPO_ROOT,
+    env: LOCAL_RUNTIME_ENV,
     onFatalExit: onChildFatal,
   });
-
-  // Give worker a brief moment to initialize queue connections
   await new Promise((r) => setTimeout(r, 1200));
-  printStepSuccess('Worker subscribed to "ci-events" queue');
-  statusList.push({ name: 'Background Worker', status: 'ok', detail: 'queue: ci-events' });
+  printStepSuccess('Worker draining the PostgreSQL job queue');
+  statusList.push({ name: 'Queue worker', status: 'ok', detail: 'postgres outbox' });
 
-  // ============================================================================
-  // Step 8: Start Frontend SPA (Vite)
-  // ============================================================================
-  printStep(7, 9, 'Starting Hopper Frontend SPA');
-
+  // ------------------------------------------------------------- 7. frontend
+  printStep(7, TOTAL_STEPS, 'Starting frontend');
   activeProcesses.frontend = spawnSupervisedProcess({
     name: 'frontend',
     command: 'npm',
     args: ['--prefix', 'frontend', 'run', 'dev'],
     cwd: REPO_ROOT,
+    env: { VITE_API_URL: URLS.backend },
     onFatalExit: onChildFatal,
   });
 
-  printStep(8, 9, 'Waiting for Frontend readiness');
   try {
     await waitForCondition(
       () => checkFrontendHealth(URLS.frontend),
       TIMEOUTS.frontendReadyMs,
       500,
-      'Frontend SPA'
+      'Frontend'
     );
-    printStepSuccess(`Frontend responding at ${URLS.frontend}`);
+    printStepSuccess(`Frontend ready at ${URLS.frontend}`);
     statusList.push({ name: 'Frontend', status: 'ok', detail: `port ${PORTS.frontend}` });
   } catch (err) {
-    printStepWarning(`Frontend check: ${err.message}`);
-    statusList.push({ name: 'Frontend', status: 'warn', detail: 'initializing' });
+    printStepWarning(`Frontend warm-up: ${err.message}`);
+    statusList.push({ name: 'Frontend', status: 'warn', detail: 'still compiling' });
   }
 
-  // ============================================================================
-  // Step 9: Start Cloudflare Quick Tunnel
-  // ============================================================================
-  printStep(9, 9, 'Starting Cloudflare Quick Tunnel');
+  // -------------------------------------------------------------- 8. summary
+  printStep(8, TOTAL_STEPS, 'Local environment ready');
 
-  let tunnelResult = null;
-  try {
-    tunnelResult = await startCloudflareTunnel(PORTS.backend, TIMEOUTS.tunnelReadyMs);
-    if (tunnelResult.active) {
-      activeProcesses.tunnel = tunnelResult;
-      printStepSuccess(tunnelResult.publicUrl);
-      statusList.push({ name: 'Cloudflare Tunnel', status: 'ok', detail: tunnelResult.publicUrl });
-    } else {
-      printStepWarning(tunnelResult.error || 'Tunnel disabled or binary not found');
-      statusList.push({ name: 'Cloudflare Tunnel', status: 'warn', detail: 'inactive' });
-    }
-  } catch (err) {
-    printStepWarning(`Tunnel startup: ${err.message}`);
-    statusList.push({ name: 'Cloudflare Tunnel', status: 'warn', detail: 'failed' });
-  }
-
-  // ============================================================================
-  // Step 10 & 11: Display Dashboard & Save Session State
-  // ============================================================================
-  const sessionData = {
+  const session = {
     sessionId: `hopper-${Date.now()}`,
     orchestratorPid: process.pid,
     startedAt: new Date().toISOString(),
@@ -389,31 +306,20 @@ async function main() {
       backend: { pid: activeProcesses.backend?.pid, port: PORTS.backend },
       worker: { pid: activeProcesses.worker?.pid },
       frontend: { pid: activeProcesses.frontend?.pid, port: PORTS.frontend },
-      tunnel: { pid: activeProcesses.tunnel?.pid, publicUrl: tunnelResult?.publicUrl },
     },
     infrastructure: {
       postgres: { port: PORTS.postgres, managed: infrastructureState.postgresManaged },
-      redis: { port: PORTS.redis, managed: infrastructureState.redisManaged },
     },
     urls: {
       frontend: URLS.frontend,
       backend: URLS.backend,
       health: URLS.backendHealth,
       webhookPath: URLS.webhookPath,
-      publicTunnel: tunnelResult?.publicUrl || null,
-      webhook: tunnelResult?.webhookUrl || null,
     },
   };
 
-  saveSession(sessionData);
-
-  // Render Dashboard
-  printDashboard({
-    statusList,
-    urls: sessionData.urls,
-  });
-
-  // Keep process in foreground streaming combined logs
+  saveSession(session);
+  printDashboard({ statusList, urls: session.urls });
 }
 
 main().catch(async (err) => {

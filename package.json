@@ -8,23 +8,34 @@
     "backend",
     "frontend"
   ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "dev": "npm --prefix backend run dev",
-    "dev:backend": "npm --prefix backend run dev",
+    "dev": "node scripts/local/start.mjs",
     "dev:frontend": "npm --prefix frontend run dev",
-    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:worker": "npm --prefix backend run worker",
+    "build": "npm run build:backend && npm run build:frontend",
     "build:backend": "npm --prefix backend run build",
     "build:frontend": "npm --prefix frontend run build",
+    "build:vercel": "npm run build:frontend",
+    "start:local": "node scripts/local/start-prod.mjs",
+    "stop": "node scripts/local/stop.mjs",
+    "status": "node scripts/local/status.mjs",
+    "doctor": "node scripts/local/doctor.mjs",
+    "infra:up": "node scripts/local/infra.mjs up",
+    "infra:down": "node scripts/local/infra.mjs down",
+    "infra:reset": "node scripts/local/infra.mjs reset",
+    "migrate": "npm --prefix backend run migrate",
     "lint": "npm --prefix backend run lint && npm --prefix frontend run lint",
+    "typecheck": "npm --prefix backend run lint && npm --prefix frontend run lint",
     "test": "npm --prefix backend run test",
     "test:backend": "npm --prefix backend run test",
     "test:frontend": "npm --prefix frontend run test",
-    "start": "npm --prefix backend start",
-    "worker": "npm --prefix backend run worker",
-    "local": "node scripts/local/start.mjs",
-    "local:stop": "node scripts/local/stop.mjs",
-    "local:status": "node scripts/local/status.mjs"
-  },
-  "author": "Hopper Engineering",
-  "license": "Apache-2.0"
+    "vercel:build": "npx vercel build",
+    "vercel:dev": "npx vercel dev",
+    "author": "Hopper Engineering",
+    "license": "Apache-2.0"
+  }
 }

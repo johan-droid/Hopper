@@ -1,29 +1,12 @@
 version: '3.8'
 
-services:
-  # Hopper API & Webhook Gateway
-  hopper-api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: hopper-api
-    ports:
-      - "3000:3000"
-    environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      PORT: ${PORT:-3000}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@hopper-postgres:5432/${POSTGRES_DB:-hopper_db}}
-      REDIS_URL: ${REDIS_URL:-redis://hopper-redis:6379}
-      GITHUB_APP_WEBHOOK_SECRET: ${GITHUB_APP_WEBHOOK_SECRET:-}
-      AI_PROVIDER: ${AI_PROVIDER:-mock}
-    depends_on:
-      hopper-postgres:
-        condition: service_healthy
-      hopper-redis:
-        condition: service_healthy
-    restart: unless-stopped
+# Hopper local infrastructure.
+#
+# PostgreSQL 16 + pgvector is the ONLY local container. The application runs
+# through `npm run dev` (Vite + tsx + the durable queue worker). Redis and the
+# Cloudflare tunnel are no longer part of the architecture.
 
-  # PostgreSQL 16 with pgvector Extension
+services:
   hopper-postgres:
     image: pgvector/pgvector:pg16
     container_name: hopper-postgres
@@ -36,30 +19,14 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/supabase/migrations/0001_initial_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
-      - ./backend/supabase/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
-      - ./backend/supabase/migrations/0002_hnsw_index.sql:/docker-entrypoint-initdb.d/03_hnsw_index.sql:ro
+      - ./backend/supabase/migrations/0002_hnsw_index.sql:/docker-entrypoint-initdb.d/02_hnsw_index.sql:ro
+      - ./backend/supabase/seed.sql:/docker-entrypoint-initdb.d/03_seed.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d hopper_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-hopper_db}"]
       interval: 5s
       timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  # Redis for BullMQ Async Event Pipeline
-  hopper-redis:
-    image: redis:7-alpine
-    container_name: hopper-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      retries: 10
     restart: unless-stopped
 
 volumes:
   postgres_data:
-  redis_data:

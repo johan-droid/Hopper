@@ -10,7 +10,6 @@ scripts/local/
 ├── logger.mjs           # Component-prefixed colored logger, file logging, terminal dashboard
 ├── health-check.mjs     # TCP, HTTP, pg_isready, and GitHub webhook route verifiers
 ├── process-manager.mjs  # /proc inspection, safe conflict detection, process supervisor, locks
-├── tunnel-manager.mjs   # Cloudflare Quick Tunnel child supervisor & URL extractor
 ├── start.mjs            # 12-step main orchestrator (npm run local)
 ├── status.mjs           # Live status reporter (npm run local:status)
 ├── stop.mjs             # Graceful shutdown tool (npm run local:stop)
