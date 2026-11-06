@@ -53,10 +53,10 @@ Hopper's primary commercial and operational objective during validation and earl
 ```
 
 ### A. Cloudflare Workers AI
-- **Failure Diagnosis & Root Cause Synthesis**: Uses `@cf/meta/llama-3.1-8b-instruct` (or `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`). Evaluates sanitized CI/CD logs, test suites, and git commit metadata to output structured JSON adhering strictly to `DiagnosisOutputSchema`.
+- **Failure Diagnosis & Root Cause Synthesis**: Uses `@cf/meta/llama-3.2-3b-instruct` (or `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`). Evaluates sanitized CI/CD logs, test suites, and git commit metadata to output structured JSON adhering strictly to `DiagnosisOutputSchema`.
 - **Free Tier Capacity**: Cloudflare provides **10,000 neurons per day for free** ($0.00/month). An 8B parameter model typically consumes ~1 neuron per input/output sequence, providing ~500–1,000 deep diagnostic evaluations per day at zero cost.
 - **Alternative Free Tier Models**:
-  - `@cf/meta/llama-3.1-8b-instruct` (Default recommended)
+  - `@cf/meta/llama-3.2-3b-instruct` (Default recommended)
   - `@cf/meta/llama-3-8b-instruct`
   - `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`
   - `@cf/mistral/mistral-7b-instruct-v0.2`
@@ -109,7 +109,7 @@ The backend connects directly to Cloudflare's Client v4 REST API:
 AI_PROVIDER=cloudflare
 CLOUDFLARE_ACCOUNT_ID="your-cloudflare-account-id"
 CLOUDFLARE_API_TOKEN="your-cloudflare-api-token"
-AI_MODEL="@cf/meta/llama-3.1-8b-instruct"
+AI_MODEL="@cf/meta/llama-3.2-3b-instruct"
 ```
 Endpoint: `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/run/${AI_MODEL}`
 
@@ -120,7 +120,7 @@ Endpoint: `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID
 | Environment Variable | Required | Description | Example |
 |---|---|---|---|
 | `AI_PROVIDER` | Yes | Specifies the active AI engine | `cloudflare` |
-| `AI_MODEL` | No | Target Cloudflare Workers AI model | `@cf/meta/llama-3.1-8b-instruct` |
+| `AI_MODEL` | No | Target Cloudflare Workers AI model | `@cf/meta/llama-3.2-3b-instruct` |
 | `CLOUDFLARE_ACCOUNT_ID` | Conditional | Cloudflare account identifier | `8f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c` |
 | `CLOUDFLARE_API_TOKEN` | Conditional | API Token with `Workers AI: Read` scope | `cf_tok_abc123...` |
 | `CLOUDFLARE_WORKER_AI_URL` | Conditional | URL of deployed Hopper Worker Edge Gateway | `https://hopper.sahooashutosh2022.workers.dev` |
@@ -142,3 +142,4 @@ Endpoint: `https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID
 | **Total AI & Infra Marginal Cost** | **$235 – $390 / month** | **$0.00 / month** | **100% Free** |
 
 By running on Cloudflare Free Tier, Hopper achieves complete financial independence during the pre-revenue validation phase while delivering enterprise-grade latency and reliability.
+

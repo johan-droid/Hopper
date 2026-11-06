@@ -101,11 +101,11 @@ export default {
           provider: 'cloudflare-workers-ai',
           freeTier: true,
           dailyFreeNeurons: 10000,
-          activeModel: env.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct',
+          activeModel: env.AI_MODEL || '@cf/meta/llama-3.2-3b-instruct',
           activeEmbeddingModel: env.EMBEDDING_MODEL || '@cf/baai/bge-base-en-v1.5',
           supportedModels: [
-            '@cf/meta/llama-3.1-8b-instruct',
-            '@cf/meta/llama-3-8b-instruct',
+            '@cf/meta/llama-3.2-3b-instruct',
+            '@cf/meta/llama-3.2-1b-instruct',
             '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
             '@cf/mistral/mistral-7b-instruct-v0.2',
           ],
@@ -128,7 +128,7 @@ export default {
     if (url.pathname === '/api/ai/diagnose' && request.method === 'POST') {
       try {
         const body: any = await request.json().catch(() => ({}));
-        const model = body.model || env.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct';
+        const model = body.model || env.AI_MODEL || '@cf/meta/llama-3.2-3b-instruct';
         const messages = body.messages || [
           {
             role: 'system',

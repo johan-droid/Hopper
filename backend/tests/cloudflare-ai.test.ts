@@ -157,7 +157,7 @@ describe('Cloudflare Workers AI & Free Tier Architecture', () => {
     it('calls Cloudflare AI endpoint and populates zero-cost telemetry', async () => {
       const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
         expect(url).toBe(
-          'https://api.cloudflare.com/client/v4/accounts/test-account-123/ai/run/@cf/meta/llama-3.1-8b-instruct'
+          'https://api.cloudflare.com/client/v4/accounts/test-account-123/ai/run/@cf/meta/llama-3.2-3b-instruct'
         );
         const headers = (init?.headers as Record<string, string>) || {};
         expect(headers['Authorization']).toBe('Bearer test-token-xyz');
@@ -182,7 +182,7 @@ describe('Cloudflare Workers AI & Free Tier Architecture', () => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(result.error_category).toBe('build_compile');
       expect(result.telemetry?.provider).toBe('cloudflare');
-      expect(result.telemetry?.model).toBe('@cf/meta/llama-3.1-8b-instruct');
+      expect(result.telemetry?.model).toBe('@cf/meta/llama-3.2-3b-instruct');
       expect(result.telemetry?.costUsd).toBe(0.0000);
       expect(result.telemetry?.isFallback).toBe(false);
       expect(DiagnosisOutputSchema.safeParse(result).success).toBe(true);
@@ -249,7 +249,7 @@ describe('Cloudflare Workers AI & Free Tier Architecture', () => {
       const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
         expect(url).toBe('https://hopper-edge.example.com/api/ai/diagnose');
         const body = JSON.parse(init?.body as string);
-        expect(body.model).toBe('@cf/meta/llama-3.1-8b-instruct');
+        expect(body.model).toBe('@cf/meta/llama-3.2-3b-instruct');
         expect(body.messages.length).toBe(2);
 
         return new Response(
@@ -348,7 +348,7 @@ describe('Cloudflare Workers AI & Free Tier Architecture', () => {
       const reservation = await controller.reserveBudget({
         idempotencyKey: `cf_test_${Date.now()}`,
         provider: 'cloudflare',
-        model: '@cf/meta/llama-3.1-8b-instruct',
+        model: '@cf/meta/llama-3.2-3b-instruct',
       });
 
       expect(reservation.allowed).toBe(true);

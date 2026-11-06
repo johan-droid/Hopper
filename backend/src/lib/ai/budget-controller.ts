@@ -45,6 +45,18 @@ export const PRICING_REGISTRY: Record<string, ModelPricing> = {
     cacheReadPerMillion: 0.075,
   },
   // Cloudflare Workers AI Models (Free Tier: 10,000 neurons/day)
+  '@cf/meta/llama-3.2-3b-instruct': {
+    inputPerMillion: 0.007,
+    outputPerMillion: 0.007,
+    cacheWritePerMillion: 0.0,
+    cacheReadPerMillion: 0.0,
+  },
+  '@cf/meta/llama-3.2-1b-instruct': {
+    inputPerMillion: 0.004,
+    outputPerMillion: 0.004,
+    cacheWritePerMillion: 0.0,
+    cacheReadPerMillion: 0.0,
+  },
   '@cf/meta/llama-3.1-8b-instruct': {
     inputPerMillion: 0.011,
     outputPerMillion: 0.011,

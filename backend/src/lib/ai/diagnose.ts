@@ -570,7 +570,7 @@ export async function callCloudflareLlm(
   timeoutMs = 15000,
   retryConfig?: RetryPolicyConfig
 ): Promise<DiagnosisOutput> {
-  const model = process.env.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct';
+  const model = process.env.AI_MODEL || '@cf/meta/llama-3.2-3b-instruct';
   const start = performance.now();
   const overallStartTime = Date.now();
 
@@ -1238,7 +1238,7 @@ export async function synthesizeDiagnosis(
 
     if (hasConfig) {
       const budgetController = new AiBudgetController();
-      const model = process.env.AI_MODEL || '@cf/meta/llama-3.1-8b-instruct';
+      const model = process.env.AI_MODEL || '@cf/meta/llama-3.2-3b-instruct';
 
       let reservation: any;
       try {
