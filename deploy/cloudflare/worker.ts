@@ -54,6 +54,39 @@ export default {
     const edgeCountry = (cf.country as string) || 'UNKNOWN';
     const isIndianSubcontinent = ['IN', 'BD', 'LK', 'NP', 'PK'].includes(edgeCountry);
 
+    // 2.1 Root Gateway Info Endpoint (serves clean JSON instead of failing on unconfigured origin)
+    if (url.pathname === '/' || url.pathname === '/api') {
+      return new Response(
+        JSON.stringify({
+          service: 'hopper-edge-gateway',
+          status: 'online',
+          version: '1.0.0',
+          environment: env.ENVIRONMENT || 'production',
+          edgeColo,
+          edgeCountry,
+          indianSubcontinentOptimized: isIndianSubcontinent,
+          originApiUrl: originUrl,
+          message: 'Hopper Cloudflare Edge API Gateway is operational. The web dashboard is hosted on Cloudflare Pages or http://localhost:5173.',
+          endpoints: {
+            gatewayInfo: '/',
+            health: '/api/health',
+            diagnoseSandbox: '/api/diagnose/sandbox',
+            signatures: '/api/signatures',
+            webhooks: '/api/webhooks/github',
+          },
+        }, null, 2),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...CORS_HEADERS,
+            ...SECURITY_HEADERS,
+            'X-Edge-Colo': edgeColo,
+          },
+        }
+      );
+    }
+
     // 3. Optional Cloudflare Turnstile Verification for unauthenticated diagnostic sandbox
     if (
       request.method === 'POST' &&
@@ -165,7 +198,27 @@ export default {
         redirect: 'manual',
       });
 
-      const latencyMs = Math.round((performance.now() - startTime) * 10) / 10;
+      // Handle Cloudflare Origin DNS Error (1016 / 530)
+      if (originResponse.status === 530) {
+        return new Response(
+          JSON.stringify({
+            error: 'ORIGIN_DNS_ERROR',
+            status: 502,
+            message: `Hopper backend origin (${originUrl}) could not be resolved by Cloudflare DNS. Ensure ORIGIN_API_URL is configured with an active server domain or tunnel.`,
+            edgeColo,
+            edgeCountry,
+          }, null, 2),
+          {
+            status: 502,
+            headers: {
+              'Content-Type': 'application/json',
+              ...CORS_HEADERS,
+              ...SECURITY_HEADERS,
+              'X-Edge-Colo': edgeColo,
+            },
+          }
+        );
+      }
       const responseHeaders = new Headers(originResponse.headers);
 
       // Merge CORS and Security headers
