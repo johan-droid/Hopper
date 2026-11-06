@@ -14,7 +14,7 @@ updates:
     commit-message:
       prefix: "chore(ci)"
       include: "scope"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     reviewers:
       - "johan-droid"
 
@@ -29,7 +29,7 @@ updates:
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     reviewers:
       - "johan-droid"
 
@@ -44,7 +44,7 @@ updates:
     commit-message:
       prefix: "chore(deps-backend)"
       include: "scope"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     reviewers:
       - "johan-droid"
 
@@ -59,6 +59,6 @@ updates:
     commit-message:
       prefix: "chore(deps-frontend)"
       include: "scope"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     reviewers:
       - "johan-droid"
