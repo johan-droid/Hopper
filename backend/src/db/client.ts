@@ -106,6 +106,37 @@ export async function withTransaction<T>(
   }
 }
 
+/**
+ * Execute a series of statements inside a single transaction with authenticated tenant context.
+ * Scopes PostgreSQL session setting 'request.jwt.claim.sub' locally to the transaction,
+ * ensuring database kernel-level Row-Level Security (RLS) policies are enforced without
+ * connection pool leakage.
+ */
+export async function withTenantContext<T>(
+  userId: string,
+  callback: (executor: DatabaseExecutor) => Promise<T>
+): Promise<T> {
+  if (customExecutor) {
+    return callback(customExecutor);
+  }
+
+  const pool = getDatabasePool();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT set_config($1, $2, true)', ['request.jwt.claim.sub', userId]);
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export interface DatabaseHealthStatus {
   isHealthy: boolean;
   latencyMs: number;

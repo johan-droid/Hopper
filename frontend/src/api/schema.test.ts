@@ -6,6 +6,11 @@ import {
   AdhocDiagnoseRequestSchema,
   AdhocDiagnoseResponseSchema,
   BillingCheckoutRequestSchema,
+  WorkspaceSchema,
+  WorkspaceMemberSchema,
+  UserProfileSchema,
+  RepositorySchema,
+  WorkflowFailureSchema,
 } from './schema';
 
 describe('Frontend API Schema Validation (Option B Decoupled)', () => {
@@ -125,5 +130,113 @@ describe('Frontend API Schema Validation (Option B Decoupled)', () => {
       plan: 'pro_dev',
     });
     expect(req.plan).toBe('pro_dev');
+  });
+
+  it('validates live backend health payload with isHealthy booleans', () => {
+    const rawBackendHealth = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      dependencies: {
+        database: { isHealthy: true, latencyMs: 2 },
+        redis: { isHealthy: true, latencyMs: 1 },
+      },
+    };
+    const parsed = HealthSchema.parse(rawBackendHealth);
+    expect(parsed.status).toBe('healthy');
+    expect(parsed.dependencies.database.isHealthy).toBe(true);
+    expect(parsed.dependencies.redis.isHealthy).toBe(true);
+  });
+
+  it('validates live backend adhoc diagnose payload with is_likely_flaky and suggested_next_check', () => {
+    const rawBackendDiagnose = {
+      signatureHash: 'sha256:7f8a91c20e14',
+      detectedFramework: 'vitest',
+      detectedExitCode: 1,
+      flakinessScore: 88.0,
+      diagnosis: {
+        root_cause_clues: 'Assertion failure due to unhandled promise rejection',
+        likely_flaky_test: {
+          is_likely_flaky: true,
+          confidence: 88.0,
+          test_name: 'test_async_job',
+          reasoning: 'Intermittent timer race',
+        },
+        relevant_log_lines: [
+          { line_number: 12, content: 'UnhandledPromiseRejectionWarning', explanation: 'Promise timeout' },
+        ],
+        suggested_next_check: 'Add await to async worker handler',
+        recommended_next_checks: ['Add await to async worker handler'],
+      },
+    };
+    const parsed = AdhocDiagnoseResponseSchema.parse(rawBackendDiagnose);
+    expect(parsed.flakinessScore).toBe(88.0);
+    expect(parsed.diagnosis.likely_flaky_test.is_likely_flaky).toBe(true);
+    expect(parsed.diagnosis.recommended_next_checks).toHaveLength(1);
+  });
+
+  it('validates workspace and member schemas', () => {
+    const ws = WorkspaceSchema.parse({
+      id: 'ws_01',
+      name: 'Acme Workspace',
+      type: 'organization',
+      is_public: false,
+      created_at: new Date().toISOString(),
+    });
+    expect(ws.name).toBe('Acme Workspace');
+    expect(ws.is_public).toBe(false);
+
+    const member = WorkspaceMemberSchema.parse({
+      id: 'mem_01',
+      workspace_id: 'ws_01',
+      user_id: 'user_01',
+      role: 'owner',
+    });
+    expect(member.role).toBe('owner');
+
+    const profile = UserProfileSchema.parse({
+      id: 'prof_01',
+      user_id: 'user_01',
+      username: 'ashutosh',
+      full_name: 'Ashutosh Sahoo',
+      current_workspace_id: 'ws_01',
+    });
+    expect(profile.username).toBe('ashutosh');
+  });
+
+  it('validates repository and workflow failure schemas', () => {
+    const mockRepo = {
+      id: 'repo-100',
+      org_id: 'org-200',
+      workspace_id: 'ws-300',
+      github_repo_id: 12345,
+      full_name: 'hopper-labs/pipeline-core',
+      default_branch: 'main',
+      is_active: true,
+      created_at: new Date().toISOString(),
+    };
+
+    const parsedRepo = RepositorySchema.parse(mockRepo);
+    expect(parsedRepo.full_name).toBe('hopper-labs/pipeline-core');
+    expect(parsedRepo.workspace_id).toBe('ws-300');
+
+    const mockFailure = {
+      id: 'fail-1',
+      githubRunId: 998877,
+      githubJobId: 112233,
+      workflowName: 'CI',
+      jobName: 'test',
+      failedStepName: 'unit',
+      commitSha: 'c0ffee11',
+      branch: 'main',
+      prNumber: 42,
+      exitCode: 1,
+      durationMs: 45000,
+      failedAt: '10 mins ago',
+      sanitizedLogSnippet: 'AssertionError: expected true to be false',
+    };
+
+    const parsedFailure = WorkflowFailureSchema.parse(mockFailure);
+    expect(parsedFailure.commitSha).toBe('c0ffee11');
+    expect(parsedFailure.exitCode).toBe(1);
   });
 });

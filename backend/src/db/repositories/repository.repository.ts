@@ -44,14 +44,16 @@ export class RepositoryRepository {
         github_repo_id,
         full_name,
         default_branch,
-        is_active
+        is_active,
+        workspace_id
       )
-      VALUES ($1, $2, $3, $4, $5)
+      VALUES ($1, $2, $3, $4, $5, $6)
       ON CONFLICT (github_repo_id)
       DO UPDATE SET
         full_name = EXCLUDED.full_name,
         default_branch = EXCLUDED.default_branch,
-        is_active = EXCLUDED.is_active
+        is_active = EXCLUDED.is_active,
+        workspace_id = COALESCE(EXCLUDED.workspace_id, repositories.workspace_id)
       RETURNING *;
     `;
 
@@ -61,6 +63,7 @@ export class RepositoryRepository {
       input.fullName,
       input.defaultBranch || 'main',
       input.isActive ?? true,
+      input.workspaceId ?? null,
     ]);
 
     return res.rows[0];
@@ -72,5 +75,27 @@ export class RepositoryRepository {
       [orgId]
     );
     return res.rows;
+  }
+
+  async listByWorkspaceId(workspaceId: string): Promise<Repository[]> {
+    const res = await this.db.query<Repository>(
+      `SELECT r.* FROM repositories r
+       LEFT JOIN organizations o ON r.org_id = o.id
+       WHERE r.workspace_id = $1 OR o.workspace_id = $1
+       ORDER BY r.full_name ASC`,
+      [workspaceId]
+    );
+    return res.rows;
+  }
+
+  async linkWorkspace(repoId: string, workspaceId: string): Promise<Repository> {
+    const res = await this.db.query<Repository>(
+      'UPDATE repositories SET workspace_id = $2 WHERE id = $1 RETURNING *',
+      [repoId, workspaceId]
+    );
+    if (!res.rows[0]) {
+      throw new Error(`Repository with id ${repoId} not found`);
+    }
+    return res.rows[0];
   }
 }

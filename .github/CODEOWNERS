@@ -1,0 +1,26 @@
+# Hopper Code Ownership Specification
+# Rules: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global fallback owner
+* @johan-droid
+
+# Architecture & Engineering Governance
+/docs/ @johan-droid
+/.github/ @johan-droid
+/.github/workflows/ @johan-droid
+/deploy/ @johan-droid
+
+# Backend Engine & Services
+/backend/ @johan-droid
+/backend/src/engine/ @johan-droid
+/backend/src/lib/ai/ @johan-droid
+/backend/src/db/ @johan-droid
+/backend/supabase/migrations/ @johan-droid
+
+# Frontend React Application
+/frontend/ @johan-droid
+
+# Operations & Infrastructure Automation
+/scripts/ @johan-droid
+/docker-compose.yml @johan-droid
+/wrangler.toml @johan-droid

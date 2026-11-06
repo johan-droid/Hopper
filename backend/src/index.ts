@@ -16,6 +16,8 @@ export * from './lib/github/app-auth.js';
 export * from './lib/github/log-fetcher.js';
 export * from './lib/github/pr-reporter.js';
 export * from './db/index.js';
+export type { ErrorCategory } from './lib/ai/diagnose.js';
 export * from './queue/index.js';
 export * from './workers/index.js';
 export * from './server/index.js';
+export * from './engine/index.js';

@@ -1,0 +1,79 @@
+name: Database Migrations Verification Quality Gate
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migration-verification:
+    name: Migration Syntax, Order, RLS & Idempotency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: hopper_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install PostgreSQL Client Tools
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Validate Migration SQL Syntax & Ordered Execution
+        run: |
+          export PGPASSWORD=postgrespassword
+          for file in $(ls -v backend/supabase/migrations/*.sql); do
+            echo "--- Validating & Applying: $file ---"
+            psql -h localhost -p 5432 -U postgres -d hopper_db -v ON_ERROR_STOP=1 -f "$file"
+          done
+        env:
+          PGPASSWORD: postgrespassword
+
+      - name: Verify Kernel RLS & Unprivileged Role Attributes
+        run: |
+          export PGPASSWORD=postgrespassword
+          # 1. Verify hopper_app role exists and has NOBYPASSRLS
+          ROLE_ATTR=$(psql -h localhost -p 5432 -U postgres -d hopper_db -tAc \
+            "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'hopper_app';")
+          if [ "$ROLE_ATTR" != "f|f" ]; then
+            echo "ERROR: hopper_app role must be NOSUPERUSER (f) and NOBYPASSRLS (f). Got: $ROLE_ATTR"
+            exit 1
+          fi
+          echo "✔ Verified: hopper_app is unprivileged (NOSUPERUSER, NOBYPASSRLS)"
+
+          # 2. Verify all 11 tables have FORCE ROW LEVEL SECURITY enabled
+          UNSECURED_TABLES=$(psql -h localhost -p 5432 -U postgres -d hopper_db -tAc \
+            "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND (c.relrowsecurity = false OR c.relforcerowsecurity = false);")
+          if [ "$UNSECURED_TABLES" -ne 0 ]; then
+            echo "ERROR: Found $UNSECURED_TABLES public tables without FORCE ROW LEVEL SECURITY enabled!"
+            exit 1
+          fi
+          echo "✔ Verified: 100% of public tables enforce FORCE ROW LEVEL SECURITY"
+        env:
+          PGPASSWORD: postgrespassword
+
+      - name: Verify Migration Idempotency
+        run: |
+          export PGPASSWORD=postgrespassword
+          echo "Testing re-application of idempotent migrations..."
+          psql -h localhost -p 5432 -U postgres -d hopper_db -v ON_ERROR_STOP=1 -f backend/supabase/migrations/0008_dedicated_runtime_role_and_rls_hardening.sql
+          psql -h localhost -p 5432 -U postgres -d hopper_db -v ON_ERROR_STOP=1 -f backend/supabase/migrations/0009_ai_budget_controller_ledger.sql
+          echo "✔ Verified: Migrations are safe and idempotent"
+        env:
+          PGPASSWORD: postgrespassword

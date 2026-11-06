@@ -96,4 +96,34 @@ export class DiagnosticReportRepository {
     }
     return res.rows[0];
   }
+
+  async listRecentForWorkspace(
+    workspaceId: string,
+    limit = 50
+  ): Promise<any[]> {
+    const sql = `
+      SELECT dr.*,
+             wf.job_name,
+             wf.workflow_name,
+             wf.failed_step_name,
+             wf.commit_sha,
+             wf.branch,
+             wf.pr_number,
+             wf.failed_at,
+             fs.signature_hash,
+             fs.error_category,
+             fs.flakiness_score,
+             r.full_name as repo_full_name
+      FROM diagnostic_reports dr
+      JOIN workflow_failures wf ON dr.failure_id = wf.id
+      JOIN repositories r ON wf.repo_id = r.id
+      LEFT JOIN failure_signatures fs ON wf.signature_id = fs.id
+      LEFT JOIN organizations o ON r.org_id = o.id
+      WHERE r.workspace_id = $1 OR o.workspace_id = $1
+      ORDER BY dr.created_at DESC
+      LIMIT $2
+    `;
+    const res = await this.db.query(sql, [workspaceId, limit]);
+    return res.rows;
+  }
 }

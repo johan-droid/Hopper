@@ -1,0 +1,46 @@
+name: Feature Request
+description: Propose an architectural enhancement, new diagnostic capability, or engineering improvement.
+title: "[FEATURE]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Propose a new feature or technical improvement for Hopper. Remember our non-negotiable core philosophy:
+        *Hopper is a CI/CD failure intelligence platform that diagnoses failures and provides evidence-backed remediation without executing arbitrary code on user repositories.*
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a specific developer pain point or workflow failure?
+      placeholder: "Investigating flaky Playwright locator timeouts requires manually..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the technical implementation, API shape, or UX design.
+      placeholder: "Add an automated heuristic classifier that detects..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions Considered
+      description: What other approaches or workarounds did you consider?
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: compliance
+    attributes:
+      label: Platform Philosophy Alignment
+      options:
+        - label: "This feature preserves passive-only diagnosis (zero arbitrary code execution on user repos)."
+          required: true
+        - label: "This feature maintains single-provider predictability and $500 monthly budget safety."
+          required: true

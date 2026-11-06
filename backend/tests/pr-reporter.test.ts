@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { renderGitHubPrComment, STICKY_COMMENT_MARKER } from '../src/lib/github/pr-reporter.js';
+import { DiagnosisOutputSchema } from '../src/lib/ai/diagnose.js';
 
 describe('Sticky PR Comment Reporter', () => {
-  const mockDiagnosis = {
+  const mockDiagnosis = DiagnosisOutputSchema.parse({
     error_category: 'test_assertion' as const,
     root_cause_clues: 'JWT token expired unexpectedly.',
     likely_flaky_test: {
@@ -17,7 +18,7 @@ describe('Sticky PR Comment Reporter', () => {
     ],
     suggested_next_check: 'Check JWT expiration setting.',
     local_repro_command: 'npx vitest run src/auth/jwt.spec.ts',
-  };
+  });
 
   it('should render sticky marker tag and markdown table', () => {
     const comment = renderGitHubPrComment({

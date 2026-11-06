@@ -231,8 +231,12 @@ export async function runEntireLifecycle(rootDir: string = process.cwd()): Promi
     // STAGE 8: Container & Multi-Tenant Deployment Verification
     // -------------------------------------------------------------------------
     await executeStage(8, 'Containerization & Docker Orchestration Check', async () => {
-      const dockerfilePath = path.join(rootDir, 'Dockerfile');
-      const composePath = path.join(rootDir, 'docker-compose.yml');
+      const dockerfilePath = fs.existsSync(path.join(rootDir, 'Dockerfile'))
+        ? path.join(rootDir, 'Dockerfile')
+        : path.join(rootDir, 'backend', 'Dockerfile');
+      const composePath = fs.existsSync(path.join(rootDir, 'docker-compose.yml'))
+        ? path.join(rootDir, 'docker-compose.yml')
+        : path.join(rootDir, '..', 'docker-compose.yml');
 
       if (!fs.existsSync(dockerfilePath) || !fs.existsSync(composePath)) {
         throw new Error('Dockerfile or docker-compose.yml missing');

@@ -20,6 +20,7 @@
     "test:backend": "npm --prefix backend run test",
     "test:frontend": "npm --prefix frontend run test",
     "start": "npm --prefix backend start",
+    "worker": "npm --prefix backend run worker",
     "local": "node scripts/local/start.mjs",
     "local:stop": "node scripts/local/stop.mjs",
     "local:status": "node scripts/local/status.mjs"
