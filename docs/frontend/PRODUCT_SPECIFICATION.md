@@ -17,16 +17,19 @@ instead of being simulated.
 ```
 /                       public landing page
 /login                  sign in / sign up / reset
+/signup                 create-account mode of the same form
 /app/overview           workspace overview
 /app/repositories       repository list
 /app/repositories/:id   repository detail + failure history
 /app/activity           failure activity feed (per repository)
+/app/failures/:failureId reserved deep link; contract gap stated in-page
 /app/investigations     ad-hoc log diagnosis
 /app/investigations/:signatureId   stored signature deep-dive
 /app/diagnoses          diagnosis history
 /app/trends             derived reliability view
 /app/integrations       service status catalogue
-/app/settings           profile + workspace
+/app/settings           redirects to /app/settings/general
+/app/settings/general   profile + workspace
 /app/settings/members   membership
 /app/settings/security  session + guarantees
 /app/settings/billing   plan tiers + usage gap
@@ -52,6 +55,7 @@ Deep links are real: `createBrowserRouter` + a Vercel SPA fallback rewrite
 | Members | `GET /api/workspaces/:id/members` | Read-only |
 | Security | Supabase session | Sign out (current + global) |
 | Billing | none usable | Tier table + explicit contract gap |
+| Failure detail | none | Reserved route; renders the required contract, not a record |
 
 ## 4. State model
 
