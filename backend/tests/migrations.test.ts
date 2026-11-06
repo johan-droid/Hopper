@@ -15,7 +15,9 @@ describe('Database Migrations', () => {
     const result = await runMigrations(executor, process.cwd());
 
     expect(result.applied).toBe(true);
-    expect(executed).toHaveLength(8);
+    expect(executed).toHaveLength(9);
+    expect(executed[8]).toContain('hopper_job_queue');
+    expect(executed[8]).toContain('hopper_claim_jobs');
     expect(executed[0]).toContain('CREATE TABLE IF NOT EXISTS organizations');
     expect(executed[1]).toContain('CREATE INDEX CONCURRENTLY IF NOT EXISTS');
     expect(executed[1]).toContain('USING hnsw (embedding vector_cosine_ops)');

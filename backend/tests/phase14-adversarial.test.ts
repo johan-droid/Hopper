@@ -22,7 +22,8 @@ import { OrganizationRepository } from '../src/db/repositories/organization.repo
 import { verifyJwtToken, DEFAULT_DEV_JWT_SECRET } from '../src/server/middleware/auth.js';
 import { generateStripeWebhookSignature, handleStripeWebhookEvent } from '../src/lib/billing/stripe-handler.js';
 import { enqueueWorkflowJob, CI_EVENTS_QUEUE_NAME } from '../src/queue/ci-queue.js';
-import { acquireDiagnosisLock, releaseDiagnosisLock } from '../src/queue/redis.js';
+import { acquireDiagnosisLock, releaseDiagnosisLock, setCoordinationBackend } from '../src/queue/coordination.js';
+import { setJobStore } from '../src/queue/job-store.js';
 
 function createSignedJwt(payload: Record<string, any>, secret: string = DEFAULT_DEV_JWT_SECRET): string {
   const header = { alg: 'HS256', typ: 'JWT' };
@@ -32,6 +33,13 @@ function createSignedJwt(payload: Record<string, any>, secret: string = DEFAULT_
   const signature = crypto.createHmac('sha256', secret).update(signingInput).digest('base64url');
   return `${signingInput}.${signature}`;
 }
+
+// This suite uses volatile adapters so it stays hermetic (no live PostgreSQL).
+process.env.QUEUE_STORE = 'memory';
+process.env.COORDINATION_BACKEND = 'memory';
+process.env.QUEUE_TRANSPORT = 'off';
+setJobStore(null);
+setCoordinationBackend(null);
 
 describe('Phase 14: Adversarial Reliability & Architecture Audit', () => {
   let server: http.Server;
@@ -428,7 +436,7 @@ describe('Phase 14: Adversarial Reliability & Architecture Audit', () => {
   // WORKSTREAM E: WORKER & QUEUE RESILIENCE
   // ===========================================================================
   describe('Workstream E: Worker & Queue Resilience', () => {
-    it('uses deterministic job IDs in BullMQ to prevent duplicate active jobs', async () => {
+    it('uses deterministic idempotency keys to prevent duplicate active jobs', async () => {
       const eventData = {
         installationId: 101,
         orgLogin: 'acme-resilience',
@@ -451,9 +459,10 @@ describe('Phase 14: Adversarial Reliability & Architecture Audit', () => {
       const job1 = await enqueueWorkflowJob(eventData);
       const job2 = await enqueueWorkflowJob(eventData);
 
-      expect(job1.jobId).toBe('job:404:1');
-      expect(job2.jobId).toBe('job:404:1');
+      expect(job1.idempotencyKey).toBe('gh:job:404:run:1');
+      expect(job2.idempotencyKey).toBe('gh:job:404:run:1');
       expect(job1.jobId).toBe(job2.jobId);
+      expect(job2.duplicate).toBe(true);
     });
 
     it('releases diagnosis lock cleanly for immediate re-use', async () => {

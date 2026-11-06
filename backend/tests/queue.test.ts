@@ -1,186 +1,192 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
-  setCustomRedis,
-  checkTenantRateLimit,
-  checkRedisHealth,
-  getRedisUrl,
-  claimWebhookDelivery,
-  acquireDiagnosisLock,
-  releaseDiagnosisLock,
-} from '../src/queue/redis.js';
+  InMemoryJobStore,
+  setJobStore,
+  computeBackoffSeconds,
+} from '../src/queue/job-store.js';
 import {
-  enqueueWorkflowJob,
-  setCustomQueue,
-  CI_EVENTS_QUEUE_NAME,
-} from '../src/queue/ci-queue.js';
+  InMemoryCoordination,
+  setCoordinationBackend,
+} from '../src/queue/coordination.js';
+import { enqueueWorkflowJob } from '../src/queue/ci-queue.js';
 import { WorkflowJobEventData } from '../src/queue/types.js';
 
-describe('Redis & Queue Infrastructure', () => {
+const baseEvent: WorkflowJobEventData = {
+  installationId: 10101,
+  orgLogin: 'acme-corp',
+  accountType: 'Organization',
+  repoFullName: 'acme-corp/billing-service',
+  githubRepoId: 98765,
+  workflowName: 'Test Suite',
+  jobName: 'unit-tests',
+  stepName: 'vitest run',
+  githubRunId: 1234567,
+  githubJobId: 889900,
+  githubRunAttempt: 2,
+  commitSha: 'a'.repeat(40),
+  branch: 'main',
+  conclusion: 'failure',
+};
+
+describe('Durable queue (PostgreSQL outbox)', () => {
+  let store: InMemoryJobStore;
+
   beforeEach(() => {
-    setCustomRedis(null);
-    setCustomQueue(null);
+    store = new InMemoryJobStore();
+    setJobStore(store);
+    process.env.QUEUE_TRANSPORT = 'off';
   });
 
   afterEach(() => {
-    setCustomRedis(null);
-    setCustomQueue(null);
+    setJobStore(null);
   });
 
-  it('resolves Redis URL properly with localhost fallback', () => {
-    const url = getRedisUrl();
-    expect(url).toBeDefined();
-    expect(typeof url).toBe('string');
+  it('derives a deterministic idempotency key from GitHub job identity', async () => {
+    const first = await enqueueWorkflowJob(baseEvent);
+    expect(first.idempotencyKey).toBe('gh:job:889900:run:2');
+    expect(first.duplicate).toBe(false);
+    expect(first.transport.published).toBe(false);
+    expect(first.transport.reason).toBe('transport_disabled');
   });
 
-  it('performs sliding window rate limiting via Redis INCR and EXPIRE', async () => {
-    let callCount = 0;
-    const mockRedis = {
-      incr: async (key: string) => {
-        expect(key).toContain('ratelimit:test-org');
-        callCount++;
-        return callCount;
-      },
-      expire: async (key: string, seconds: number) => {
-        expect(key).toContain('ratelimit:test-org');
-        expect(seconds).toBe(60);
-        return 1;
-      },
-    };
+  it('never creates a second durable job for a redelivered webhook', async () => {
+    const first = await enqueueWorkflowJob(baseEvent);
+    const second = await enqueueWorkflowJob(baseEvent);
 
-    setCustomRedis(mockRedis);
+    expect(second.duplicate).toBe(true);
+    expect(second.jobId).toBe(first.jobId);
 
-    // Call 1
-    const res1 = await checkTenantRateLimit('test-org', 2, 60);
-    expect(res1.allowed).toBe(true);
-    expect(res1.remaining).toBe(1);
-
-    // Call 2
-    const res2 = await checkTenantRateLimit('test-org', 2, 60);
-    expect(res2.allowed).toBe(true);
-    expect(res2.remaining).toBe(0);
-
-    // Call 3 (exceeds limit)
-    const res3 = await checkTenantRateLimit('test-org', 2, 60);
-    expect(res3.allowed).toBe(false);
-    expect(res3.remaining).toBe(0);
+    const metrics = await store.metrics();
+    expect(metrics.pending).toBe(1);
   });
 
-  it('fails open on Redis rate limit error to avoid dropping critical webhooks', async () => {
-    const brokenRedis = {
-      incr: async () => {
-        throw new Error('Redis connection down');
-      },
-    };
+  it('claims a job exactly once even for concurrent consumers', async () => {
+    await enqueueWorkflowJob(baseEvent);
 
-    setCustomRedis(brokenRedis);
-    const res = await checkTenantRateLimit('test-org', 10, 60);
-    expect(res.allowed).toBe(true);
-    expect(res.remaining).toBe(10);
+    const [a, b] = await Promise.all([
+      store.claim({ workerId: 'worker-a', limit: 1 }),
+      store.claim({ workerId: 'worker-b', limit: 1 }),
+    ]);
+
+    const claimed = [...a, ...b];
+    expect(claimed).toHaveLength(1);
+    expect(claimed[0].attempts).toBe(1);
   });
 
-  it('deduplicates webhook deliveries with a 24h NX marker', async () => {
-    let stored = false;
-    const mockRedis = {
-      set: async (key: string, value: string, ...args: any[]) => {
-        expect(key).toBe('gh:delivery:delivery-uuid-1');
-        expect(value).toBe('1');
-        expect(args).toEqual(['EX', 86400, 'NX']);
-        if (stored) return null;
-        stored = true;
-        return 'OK';
-      },
-    };
-
-    setCustomRedis(mockRedis);
-    expect(await claimWebhookDelivery('delivery-uuid-1')).toBe(true);
-    expect(await claimWebhookDelivery('delivery-uuid-1')).toBe(false);
+  it('applies bounded exponential backoff', () => {
+    expect(computeBackoffSeconds(1)).toBe(5);
+    expect(computeBackoffSeconds(2)).toBe(10);
+    expect(computeBackoffSeconds(3)).toBe(20);
+    expect(computeBackoffSeconds(50)).toBe(900);
   });
 
-  it('fails open on Redis errors during webhook deduplication', async () => {
-    setCustomRedis({
-      set: async () => {
-        throw new Error('Redis connection down');
-      },
-    });
+  it('moves a poison message to the dead-letter ledger after max attempts', async () => {
+    await store.enqueue({ payload: baseEvent, maxAttempts: 2 });
 
-    expect(await claimWebhookDelivery('delivery-uuid-2')).toBe(true);
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const [job] = await store.claim({ workerId: `w-${attempt}`, limit: 1 });
+      expect(job).toBeDefined();
+      const outcome = await store.fail(job.id, { error: `boom-${attempt}`, delaySeconds: 0 });
+      expect(outcome.dead).toBe(attempt === 2);
+    }
+
+    expect(await store.deadLetterCount()).toBe(1);
+    const metrics = await store.metrics();
+    expect(metrics.dead).toBe(1);
+  });
+
+  it('reaps expired consumer locks so a crashed function cannot lose the job', async () => {
+    await enqueueWorkflowJob(baseEvent);
+
+    const [job] = await store.claim({ workerId: 'crashed-worker', limit: 1, lockSeconds: 30 });
+    expect(job).toBeDefined();
+
+    // Force the lock into the past.
+    const internal = (store as any).jobs.get(job.id);
+    internal.lockExpiresAt = Date.now() - 1000;
+
+    expect(await store.reapExpired()).toBe(1);
+
+    const [reclaimed] = await store.claim({ workerId: 'recovery-worker', limit: 1 });
+    expect(reclaimed).toBeDefined();
+    expect(reclaimed.id).toBe(job.id);
+    expect(reclaimed.attempts).toBe(2);
+  });
+
+  it('reschedules deferred work without consuming an attempt', async () => {
+    await enqueueWorkflowJob(baseEvent);
+    const [job] = await store.claim({ workerId: 'w1', limit: 1 });
+
+    await store.retry(job.id, 0, 'deferred: lock held');
+
+    const [retried] = await store.claim({ workerId: 'w2', limit: 1 });
+    expect(retried.id).toBe(job.id);
+    expect(retried.attempts).toBe(1);
+  });
+});
+
+describe('Coordination primitives (replacing Redis)', () => {
+  let coordination: InMemoryCoordination;
+
+  beforeEach(() => {
+    coordination = new InMemoryCoordination();
+    setCoordinationBackend(coordination);
+  });
+
+  afterEach(() => {
+    setCoordinationBackend(null);
+  });
+
+  it('enforces a fixed-window tenant rate limit', async () => {
+    expect((await coordination.checkTenantRateLimit('test-org', 2, 60)).allowed).toBe(true);
+    expect((await coordination.checkTenantRateLimit('test-org', 2, 60)).allowed).toBe(true);
+
+    const third = await coordination.checkTenantRateLimit('test-org', 2, 60);
+    expect(third.allowed).toBe(false);
+    expect(third.remaining).toBe(0);
+  });
+
+  it('isolates rate limit windows per tenant', async () => {
+    await coordination.checkTenantRateLimit('org-a', 1, 60);
+    const blocked = await coordination.checkTenantRateLimit('org-a', 1, 60);
+    const otherTenant = await coordination.checkTenantRateLimit('org-b', 1, 60);
+
+    expect(blocked.allowed).toBe(false);
+    expect(otherTenant.allowed).toBe(true);
+  });
+
+  it('deduplicates webhook deliveries', async () => {
+    expect(await coordination.claimWebhookDelivery('delivery-uuid-1')).toBe(true);
+    expect(await coordination.claimWebhookDelivery('delivery-uuid-1')).toBe(false);
   });
 
   it('acquires and releases a fingerprint-scoped diagnosis lock', async () => {
     const fingerprint = 'a'.repeat(64);
-    let acquiredOnce = false;
-    const mockRedis = {
-      set: async (key: string, value: string, ...args: any[]) => {
-        expect(key).toBe(`lock:diagnose:repo-1:${fingerprint}`);
-        expect(args).toEqual(['EX', 45, 'NX']);
-        if (acquiredOnce) return null;
-        acquiredOnce = true;
-        return 'OK';
-      },
-      eval: async (_script: string, _numKeys: number, key: string, token: string) => {
-        expect(key).toBe(`lock:diagnose:repo-1:${fingerprint}`);
-        expect(token).toBeDefined();
-        return 1;
-      },
-    };
 
-    setCustomRedis(mockRedis);
-    const lock = await acquireDiagnosisLock('repo-1', fingerprint);
+    const lock = await coordination.acquireDiagnosisLock('repo-1', fingerprint);
     expect(lock.acquired).toBe(true);
 
-    const second = await acquireDiagnosisLock('repo-1', fingerprint);
+    const second = await coordination.acquireDiagnosisLock('repo-1', fingerprint);
     expect(second.acquired).toBe(false);
 
-    await releaseDiagnosisLock(lock.key, lock.token);
+    await coordination.releaseDiagnosisLock(lock.key, lock.token);
+    const third = await coordination.acquireDiagnosisLock('repo-1', fingerprint);
+    expect(third.acquired).toBe(true);
   });
 
-  it('checks Redis health status correctly', async () => {    const mockHealthyRedis = {
-      ping: async () => 'PONG',
-    };
-    setCustomRedis(mockHealthyRedis);
+  it('does not release a lock owned by another token', async () => {
+    const lock = await coordination.acquireDiagnosisLock('repo-2', 'b'.repeat(64));
+    await coordination.releaseDiagnosisLock(lock.key, 'wrong-token');
 
-    const health = await checkRedisHealth();
-    expect(health.isHealthy).toBe(true);
-    expect(health.latencyMs).toBeGreaterThanOrEqual(0);
+    const stillHeld = await coordination.acquireDiagnosisLock('repo-2', 'b'.repeat(64));
+    expect(stillHeld.acquired).toBe(false);
   });
 
-  it('enqueues workflow job with deterministic job ID to prevent duplicate processing', async () => {
-    let capturedName = '';
-    let capturedData: any = null;
-    let capturedOpts: any = null;
+  it('claims a processed event exactly once and can release it for retry', async () => {
+    expect(await coordination.claimProcessedEvent('gh:job:1:run:1')).toBe(true);
+    expect(await coordination.claimProcessedEvent('gh:job:1:run:1')).toBe(false);
 
-    const mockQueue = {
-      add: async (name: string, data: any, opts: any) => {
-        capturedName = name;
-        capturedData = data;
-        capturedOpts = opts;
-        return { id: opts.jobId };
-      },
-    };
-
-    setCustomQueue(mockQueue);
-
-    const event: WorkflowJobEventData = {
-      installationId: 10101,
-      orgLogin: 'acme-corp',
-      accountType: 'Organization',
-      repoFullName: 'acme-corp/billing-service',
-      githubRepoId: 98765,
-      workflowName: 'Test Suite',
-      jobName: 'unit-tests',
-      stepName: 'vitest run',
-      githubRunId: 1234567,
-      githubJobId: 889900,
-      githubRunAttempt: 2,
-      commitSha: 'a'.repeat(40),
-      branch: 'main',
-      conclusion: 'failure',
-    };
-
-    const res = await enqueueWorkflowJob(event);
-    expect(capturedName).toBe('process-workflow-job');
-    expect(capturedData.githubJobId).toBe(889900);
-    expect(capturedOpts.jobId).toBe('job:889900:2');
-    expect(res.jobId).toBe('job:889900:2');
+    await coordination.releaseProcessedEvent('gh:job:1:run:1');
+    expect(await coordination.claimProcessedEvent('gh:job:1:run:1')).toBe(true);
   });
 });

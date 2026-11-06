@@ -1,13 +1,12 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { DelayedError } from 'bullmq';
 import { processWorkflowJob } from '../src/workers/processors/workflow-job.processor.js';
-import { setCustomRedis } from '../src/queue/redis.js';
+import { setCoordinationBackend } from '../src/queue/coordination.js';
 import { WorkflowJobEventData } from '../src/queue/types.js';
 import { Organization, Repository, FailureSignature, WorkflowFailure, DiagnosticReport } from '../src/db/types.js';
 
-describe('WorkflowJobProcessor (BullMQ Worker)', () => {
+describe('WorkflowJobProcessor (transport-agnostic)', () => {
   afterEach(() => {
-    setCustomRedis(null);
+    setCoordinationBackend(null);
   });
   const baseEvent: WorkflowJobEventData = {
     installationId: 20202,
@@ -275,18 +274,12 @@ Process completed with exit code 1.
     expect(reportRootCause).toContain('Network gateway handshake timed out');
   });
 
-  it('delays a matrix job while another worker diagnoses the same fingerprint', async () => {
-    setCustomRedis({
-      set: async () => null,
-    });
-
-    let delayedUntil = 0;
-    const fakeJob = {
-      token: 'worker-token',
-      moveToDelayed: async (timestamp: number) => {
-        delayedUntil = timestamp;
-      },
-    } as any;
+  it('defers a matrix job while another consumer diagnoses the same fingerprint', async () => {
+    // Simulate lock contention: the coordination backend reports the lock as held.
+    setCoordinationBackend({
+      acquireDiagnosisLock: async () => ({ acquired: false, key: 'held', token: 'other' }),
+      releaseDiagnosisLock: async () => undefined,
+    } as any);
 
     const mockDeps = {
       orgRepo: {
@@ -298,9 +291,10 @@ Process completed with exit code 1.
       } as any,
     };
 
-    const run = processWorkflowJob(baseEvent, mockDeps, fakeJob);
+    const result = await processWorkflowJob(baseEvent, mockDeps);
 
-    await expect(run).rejects.toBeInstanceOf(DelayedError);
-    expect(delayedUntil).toBeGreaterThan(Date.now());
+    // Deferral is a reschedule signal, not a failure: the consumer calls retry().
+    expect(result.status).toBe('deferred');
+    expect(result.reason).toContain('matrix job');
   });
 });
