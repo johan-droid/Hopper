@@ -5,6 +5,7 @@ import { useHealthQuery } from '../../api/hooks';
 import { useUiStore } from '../../store/useAppStore';
 import { useWorkspace } from '../../features/workspace/WorkspaceProvider';
 import { Badge, Button, IconButton, Kbd, StatusDot } from '../ui/primitives';
+import { Tooltip } from '../ui/feedback';
 import { ROUTES } from '../../lib/routes';
 import { Command, LogOut, Menu, Moon, Search, Sun, User } from 'lucide-react';
 
@@ -61,20 +62,21 @@ export const Topbar: React.FC<{ onOpenMobileNav: () => void }> = ({ onOpenMobile
         </span>
       </button>
 
-      <div
-        className="flex items-center gap-1.5 rounded-md border border-hairline px-2 py-1 text-[11px] text-ink-secondary"
-        title={statusLabel}
-      >
-        <StatusDot tone={statusTone} pulse={healthLoading} />
-        <span className="hidden lg:inline">{statusLabel}</span>
-      </div>
+      <Tooltip label={statusLabel}>
+        <div className="flex items-center gap-1.5 rounded-md border border-hairline px-2 py-1 text-[11px] text-ink-secondary">
+          <StatusDot tone={statusTone} pulse={healthLoading} />
+          <span className="hidden lg:inline">{statusLabel}</span>
+        </div>
+      </Tooltip>
 
-      <IconButton
-        label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-      >
-        {theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden /> : <Moon className="h-4 w-4" aria-hidden />}
-      </IconButton>
+      <Tooltip label={theme === 'dark' ? 'Light theme' : 'Dark theme'}>
+        <IconButton
+          label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        >
+          {theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden /> : <Moon className="h-4 w-4" aria-hidden />}
+        </IconButton>
+      </Tooltip>
 
       {isAuthenticated ? (
         <div className="relative">
