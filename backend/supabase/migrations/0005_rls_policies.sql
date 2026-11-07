@@ -2,10 +2,23 @@
 -- Enforces multi-tenant data isolation and role-based permissions
 
 -- Ensure auth schema and auth.uid() helper exist for local / non-Supabase environments
-CREATE SCHEMA IF NOT EXISTS auth;
-CREATE OR REPLACE FUNCTION auth.uid() RETURNS UUID AS $$
-  SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::UUID;
-$$ LANGUAGE SQL STABLE;
+DO $do$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'auth') THEN
+    EXECUTE 'CREATE SCHEMA auth';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc p 
+    JOIN pg_namespace n ON p.pronamespace = n.oid 
+    WHERE n.nspname = 'auth' AND p.proname = 'uid'
+  ) THEN
+    EXECUTE $func$
+      CREATE FUNCTION auth.uid() RETURNS UUID AS $inner$
+        SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::UUID;
+      $inner$ LANGUAGE SQL STABLE;
+    $func$;
+  END IF;
+END $do$;
 
 -- ==============================================================================
 -- 1. Enable RLS on core Hopper tables

@@ -2,12 +2,19 @@
 -- Extends the existing Hopper schema with multi-tenant capabilities
 
 -- Ensure auth schema and stub objects exist for local development / non-Supabase environments
-CREATE SCHEMA IF NOT EXISTS auth;
-CREATE TABLE IF NOT EXISTS auth.users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email TEXT UNIQUE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'auth') THEN
+    EXECUTE 'CREATE SCHEMA auth';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'users') THEN
+    EXECUTE 'CREATE TABLE auth.users (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email TEXT UNIQUE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )';
+  END IF;
+END $$;
 
 -- 1. User profiles linked to Supabase Auth identities
 CREATE TABLE IF NOT EXISTS user_profiles (

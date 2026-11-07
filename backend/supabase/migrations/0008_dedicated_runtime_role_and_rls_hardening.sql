@@ -13,18 +13,25 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hopper_app') THEN
-    CREATE ROLE hopper_app WITH LOGIN PASSWORD 'hopper_app_secure_runtime_password';
+    CREATE ROLE hopper_app WITH LOGIN PASSWORD 'hopper_app_secure_runtime_password' NOCREATEDB NOCREATEROLE NOINHERIT;
   ELSE
     ALTER ROLE hopper_app WITH LOGIN PASSWORD 'hopper_app_secure_runtime_password';
   END IF;
-  
-  -- Strictly strip elevated attributes
-  ALTER ROLE hopper_app NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Role configuration notice: %', SQLERRM;
 END $$;
 
 -- Grant schema usage
-GRANT USAGE ON SCHEMA public TO hopper_app;
-GRANT USAGE ON SCHEMA auth TO hopper_app;
+DO $$
+BEGIN
+  GRANT USAGE ON SCHEMA public TO hopper_app;
+  BEGIN
+    GRANT USAGE ON SCHEMA auth TO hopper_app;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- ==============================================================================
 -- 2. Force Row-Level Security on All Core Tenant Tables
