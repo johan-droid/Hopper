@@ -2,16 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import {
   initiateGitHubOAuth,
-  signInWithDevAccount,
+  sanitizeRedirectPath,
   useSession,
 } from './useSession';
+import { isSupabaseConfigured } from '../../lib/supabase';
 import { ROUTES } from '../../lib/routes';
 import {
   Button,
   Card,
   InlineNotice,
+  Badge,
 } from '../../components/ui/primitives';
-import { Zap, Github, ShieldCheck, Terminal } from 'lucide-react';
+import { DotGridBackground } from '../../components/ui/DotGridBackground';
+import { WorkflowVisualizer } from '../../components/ui/WorkflowVisualizer';
+import {
+  Zap,
+  Github,
+  ShieldCheck,
+  ArrowRight,
+  Info,
+  CheckCircle2,
+} from 'lucide-react';
 
 const LoginPage: React.FC = () => {
   const { isAuthenticated, status } = useSession();
@@ -20,9 +31,10 @@ const LoginPage: React.FC = () => {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
-  const from = (location.state as { from?: string } | null)?.from ?? ROUTES.overview;
+  // Safely sanitize target destination against open-redirect vulnerabilities
+  const rawFrom = (location.state as { from?: string } | null)?.from;
+  const from = sanitizeRedirectPath(rawFrom);
 
   // Catch token in query params if landed on /login?token=... or /login/callback?token=...
   useEffect(() => {
@@ -38,135 +50,193 @@ const LoginPage: React.FC = () => {
     return <Navigate to={from} replace />;
   }
 
-  const handleGitHubOAuth = () => {
+  const handleGitHubOAuth = async () => {
     setError(null);
     setBusy(true);
     try {
-      initiateGitHubOAuth();
+      await initiateGitHubOAuth();
     } catch (caught) {
       setBusy(false);
-      setError(caught instanceof Error ? caught.message : 'Could not initiate GitHub login.');
-    }
-  };
-
-  const handleDevLogin = async () => {
-    setError(null);
-    setNotice(null);
-    setBusy(true);
-    try {
-      await signInWithDevAccount('johan-droid');
-      navigate(from, { replace: true });
-    } catch (caught) {
       setError(
-        caught instanceof Error && caught.message
+        caught instanceof Error
           ? caught.message
-          : 'Failed to authenticate development account.'
+          : 'Could not initiate GitHub authentication. Please try again.'
       );
-    } finally {
-      setBusy(false);
     }
   };
 
   const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
 
   return (
-    <div className="flex min-h-screen flex-col bg-canvas">
-      <header className="border-b border-hairline px-5 py-3">
-        <Link to={ROUTES.landing} className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
-          <span className="flex h-6 w-6 items-center justify-center rounded bg-accent text-accent-contrast">
-            <Zap className="h-3.5 w-3.5" aria-hidden />
-          </span>
-          Hopper
-        </Link>
+    <div className="relative min-h-screen w-full bg-canvas text-ink antialiased selection:bg-accent/20 selection:text-ink">
+      {/* Ambient background with dot grid and crimson glow */}
+      <DotGridBackground glowColor="both" />
+
+      {/* Top Navigation */}
+      <header className="relative z-10 border-b border-hairline/60 bg-canvas/60 backdrop-blur-md">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          <Link
+            to={ROUTES.landing}
+            className="group inline-flex items-center gap-2.5 text-sm font-semibold tracking-tight text-ink transition-colors hover:text-ink"
+          >
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-danger to-rose-600 text-white shadow-sm ring-1 ring-white/20 transition-transform duration-200 group-hover:scale-105">
+              <Zap className="h-4 w-4" aria-hidden />
+            </span>
+            <span className="font-semibold tracking-tight">Hopper</span>
+            <Badge tone="neutral" mono className="text-[10px] uppercase tracking-wider">
+              Autonomous CI/CD
+            </Badge>
+          </Link>
+
+          <Link
+            to={ROUTES.landing}
+            className="text-xs text-ink-secondary transition-colors hover:text-ink inline-flex items-center gap-1"
+          >
+            <span>Documentation & Overview</span>
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
       </header>
 
-      <main className="flex flex-1 items-center justify-center px-4 py-10">
-        <div className="w-full max-w-md">
-          <div className="text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10 text-accent">
-              <Github className="h-6 w-6" />
-            </div>
-            <h1 className="mt-3 text-xl font-semibold tracking-tight text-ink">
-              Sign in to Hopper
-            </h1>
-            <p className="mt-1 text-xs text-ink-secondary">
-              Hopper uses GitHub as the authoritative source of truth for identity, organizations, and repositories.
-            </p>
-          </div>
-
-          <Card className="mt-6 p-6">
-            {error ? (
-              <div className="mb-4">
-                <InlineNotice tone="danger" title="Authentication Error">
-                  {error}
-                </InlineNotice>
-              </div>
-            ) : null}
-
-            {notice ? (
-              <div className="mb-4">
-                <InlineNotice tone="success" title="Success">
-                  {notice}
-                </InlineNotice>
-              </div>
-            ) : null}
-
-            {/* Authoritative Single-Sign-On GitHub OAuth Flow */}
+      {/* Main Content: Split Composition */}
+      <main className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8 lg:py-16">
+        <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12 lg:gap-16">
+          {/* Left Column: Platform Promise & Autonomous Workflow */}
+          <section
+            aria-label="Platform Architecture & Lifecycle"
+            className="flex flex-col space-y-6 lg:col-span-7"
+          >
             <div className="space-y-3">
-              <Button
-                type="button"
-                variant="primary"
-                className="w-full justify-center gap-2 py-2.5 text-sm font-medium shadow-sm"
-                onClick={handleGitHubOAuth}
-                loading={busy}
-                disabled={status === 'loading'}
-              >
-                <Github className="h-4 w-4" />
-                Continue with GitHub
-              </Button>
-
-              {/* Seamless Development Authentication (Bypasses token input completely) */}
-              {isDevelopment ? (
-                <div className="pt-2">
-                  <div className="relative my-3 flex items-center justify-center">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-hairline" />
-                    </div>
-                    <div className="relative bg-raised px-2 text-[10px] font-medium uppercase tracking-wider text-ink-muted">
-                      Local Development
-                    </div>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="w-full justify-center gap-2 py-2 text-xs font-normal"
-                    onClick={handleDevLogin}
-                    loading={busy}
-                    disabled={status === 'loading'}
-                  >
-                    <Terminal className="h-3.5 w-3.5 text-accent" />
-                    Quick Sign-In (@johan-droid)
-                  </Button>
-                </div>
-              ) : null}
+              <div className="inline-flex items-center gap-2 rounded-full border border-danger/30 bg-danger/10 px-3 py-1 text-xs font-medium text-danger">
+                <span className="flex h-1.5 w-1.5 rounded-full bg-danger animate-pulse" />
+                Next-Gen Autonomous Engineering
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-ink sm:text-4xl lg:text-[40px] lg:leading-[1.15]">
+                Autonomous software engineering,{' '}
+                <span className="bg-gradient-to-r from-danger via-rose-400 to-accent bg-clip-text text-transparent">
+                  verified in isolation.
+                </span>
+              </h1>
+              <p className="max-w-2xl text-sm leading-relaxed text-ink-secondary sm:text-base">
+                Hopper links directly with your GitHub ecosystem to analyze CI failures, build context-aware fixes in ephemeral microVM sandboxes, run regression suites, and submit verified pull requests for engineering sign-off.
+              </p>
             </div>
 
-            <div className="mt-5 rounded-md bg-inset/50 p-3 text-[11px] text-ink-muted border border-hairline">
-              <div className="flex items-start gap-2">
-                <ShieldCheck className="h-4 w-4 text-accent shrink-0 mt-0.5" />
+            {/* Workflow Visualizer Card */}
+            <div className="overflow-hidden rounded-xl border border-hairline/80 bg-raised/70 p-5 shadow-2xl backdrop-blur-md">
+              <WorkflowVisualizer />
+            </div>
+
+            {/* Platform Trust Highlights */}
+            <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-2">
+              <div className="flex items-start gap-2.5 rounded-lg border border-hairline/50 bg-raised/40 p-3 text-xs text-ink-secondary">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
                 <span>
-                  No manual API tokens required. Authenticating provisions your personal workspace, links your active GitHub identity, and synchronizes your repositories automatically.
+                  <strong className="text-ink font-medium">Deterministic Isolation:</strong> Checks execute in clean sandboxes with strict network boundaries.
+                </span>
+              </div>
+              <div className="flex items-start gap-2.5 rounded-lg border border-hairline/50 bg-raised/40 p-3 text-xs text-ink-secondary">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-accent mt-0.5" />
+                <span>
+                  <strong className="text-ink font-medium">Minimal Permissions:</strong> Auth login is read-only. Repo access requires explicit GitHub App installation.
                 </span>
               </div>
             </div>
-          </Card>
+          </section>
 
-          <p className="mt-4 text-center text-[11px] text-ink-muted">
-            <Link to={ROUTES.landing} className="hover:text-ink">
-              ← Back to the product page
-            </Link>
-          </p>
+          {/* Right Column: Authoritative GitHub Authentication */}
+          <section
+            aria-label="Authentication Panel"
+            className="flex flex-col justify-center lg:col-span-5 lg:pt-4"
+          >
+            <Card className="relative overflow-hidden border-hairline/80 bg-raised/90 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
+              {/* Subtle top card glow line */}
+              <div
+                className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/40 to-transparent"
+                aria-hidden="true"
+              />
+
+              {/* Header */}
+              <div className="text-center sm:text-left">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-hairline bg-inset text-ink shadow-inner sm:mx-0">
+                  <Github className="h-6 w-6" aria-hidden="true" />
+                </div>
+                <h2 className="mt-4 text-xl font-bold tracking-tight text-ink sm:text-2xl">
+                  Sign in to Hopper
+                </h2>
+                <p className="mt-1.5 text-xs text-ink-secondary leading-relaxed sm:text-sm">
+                  Connect your GitHub account to access your repositories, diagnostic intelligence, and autonomous workspace runs.
+                </p>
+              </div>
+
+              {/* Error Notice */}
+              {error ? (
+                <div className="mt-5">
+                  <InlineNotice tone="danger" title="Authentication Error">
+                    {error}
+                  </InlineNotice>
+                </div>
+              ) : null}
+
+              {/* Development Environment Diagnostic notice if unconfigured */}
+              {isDevelopment && !isSupabaseConfigured ? (
+                <div className="mt-5 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-300">
+                  <div className="flex items-start gap-2">
+                    <Info className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-amber-200">Local Dev Mode:</span> Direct GitHub backend gateway enabled. OAuth will route via <code className="rounded bg-black/40 px-1 py-0.5 font-mono text-[11px]">/api/auth/github</code>.
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Single Primary Action: Continue with GitHub */}
+              <div className="mt-6 space-y-4">
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="group relative flex w-full items-center justify-center gap-2.5 rounded-lg bg-ink py-3 text-sm font-semibold text-canvas shadow-lg transition-all duration-200 hover:bg-ink/90 hover:shadow-accent/10 focus-visible:ring-2 focus-visible:ring-accent"
+                  onClick={handleGitHubOAuth}
+                  loading={busy}
+                  disabled={status === 'loading'}
+                  aria-label="Continue with GitHub"
+                >
+                  <Github className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110" />
+                  <span>Continue with GitHub</span>
+                </Button>
+
+                {/* Identity & Permissions Clarification */}
+                <div className="rounded-lg border border-hairline/60 bg-inset/60 p-3.5 text-left text-[11px] leading-relaxed text-ink-secondary">
+                  <div className="flex items-start gap-2.5">
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-accent mt-0.5" />
+                    <div>
+                      <span className="font-medium text-ink">Authoritative GitHub Identity:</span>{' '}
+                      Signing in provides identity only (<code className="font-mono text-[10px] text-ink">read:user</code>, <code className="font-mono text-[10px] text-ink">user:email</code>). Hopper never requests repository write credentials during sign-in. Code execution and PR access are strictly managed through the Hopper GitHub App per selected repository.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer info */}
+              <div className="mt-6 border-t border-hairline/60 pt-4 text-center">
+                <p className="text-[11px] text-ink-muted">
+                  By signing in, you agree to Hopper's{' '}
+                  <span className="text-ink-secondary">Terms of Service</span> and{' '}
+                  <span className="text-ink-secondary">Security Protocol</span>.
+                </p>
+              </div>
+            </Card>
+
+            {/* Back link */}
+            <div className="mt-4 text-center">
+              <Link
+                to={ROUTES.landing}
+                className="text-xs text-ink-muted transition-colors hover:text-ink inline-flex items-center gap-1.5"
+              >
+                <span>← Return to homepage</span>
+              </Link>
+            </div>
+          </section>
         </div>
       </main>
     </div>

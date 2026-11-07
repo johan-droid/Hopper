@@ -8,7 +8,14 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
  * (local UI work without a backend) the app renders a setup notice instead of
  * pretending to be authenticated.
  */
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export const isSupabaseConfigured = Boolean(
+  supabaseUrl &&
+  supabaseAnonKey &&
+  !supabaseUrl.includes('your-project') &&
+  !supabaseUrl.includes('unconfigured') &&
+  !supabaseAnonKey.includes('your-anon-key') &&
+  !supabaseAnonKey.includes('unconfigured')
+);
 
 export const supabase = createClient(
   supabaseUrl || 'https://unconfigured.supabase.co',

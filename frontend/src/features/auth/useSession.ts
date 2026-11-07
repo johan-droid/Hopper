@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { create } from 'zustand';
 import { api } from '../../api/client';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { ROUTES } from '../../lib/routes';
 
 export type SessionStatus = 'loading' | 'authenticated' | 'anonymous' | 'unconfigured';
 
@@ -46,6 +47,27 @@ export const useSessionStore = create<SessionState>((set) => ({
     }),
   setStatus: (status) => set({ status }),
 }));
+
+/**
+ * Validates and sanitizes internal redirect URLs to prevent open-redirect vulnerabilities.
+ */
+export function sanitizeRedirectPath(candidate?: string | null): string {
+  if (!candidate || typeof candidate !== 'string') {
+    return ROUTES.overview;
+  }
+  const trimmed = candidate.trim();
+  if (
+    trimmed.startsWith('/') &&
+    !trimmed.startsWith('//') &&
+    !trimmed.startsWith('/\\') &&
+    !trimmed.includes(':') &&
+    !trimmed.includes('\n') &&
+    !trimmed.includes('\r')
+  ) {
+    return trimmed;
+  }
+  return ROUTES.overview;
+}
 
 /**
  * Parses JWT claims from a base64url encoded token.
@@ -131,7 +153,7 @@ export function useSessionBootstrap(): void {
         }
       }
 
-      // 2. Check Hopper GitHub auth token
+      // 2. Check Hopper GitHub auth token in storage
       const storedToken = typeof window !== 'undefined' ? localStorage.getItem('hopper_auth_token') : null;
       if (storedToken) {
         try {
@@ -237,34 +259,24 @@ export function useSession() {
 }
 
 /**
- * Initiates the pure GitHub OAuth Web Application flow.
+ * Initiates authoritative GitHub OAuth flow.
+ * Uses Supabase OAuth when configured, with fallback to backend OAuth endpoint.
  */
-export function initiateGitHubOAuth(): void {
-  const currentOrigin = window.location.origin;
-  const redirectTarget = `${currentOrigin}/login/callback`;
-  window.location.href = `/api/auth/github?redirect_uri=${encodeURIComponent(redirectTarget)}`;
-}
-
-/**
- * Authenticates with a GitHub Personal Access Token (PAT).
- */
-export async function signInWithGitHubToken(token: string): Promise<HopperSession> {
-  const result = await api.loginWithGitHubToken(token);
-  localStorage.setItem('hopper_auth_token', result.token);
-  const session = buildHopperSession(result.token, result.user);
-  useSessionStore.getState().setSession(session);
-  return session;
-}
-
-/**
- * Direct development sign-in without requiring manual tokens.
- */
-export async function signInWithDevAccount(login?: string): Promise<HopperSession> {
-  const result = await api.loginDev(login);
-  localStorage.setItem('hopper_auth_token', result.token);
-  const session = buildHopperSession(result.token, result.user);
-  useSessionStore.getState().setSession(session);
-  return session;
+export async function initiateGitHubOAuth(): Promise<void> {
+  if (isSupabaseConfigured) {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
+    const redirectTo = `${origin}/login/callback`;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'github',
+      options: {
+        redirectTo,
+        scopes: 'read:user user:email',
+      },
+    });
+    if (error) throw error;
+  } else if (typeof window !== 'undefined') {
+    window.location.href = '/api/auth/github';
+  }
 }
 
 /**
@@ -283,49 +295,4 @@ export async function signOut(): Promise<void> {
   }
   await api.logout().catch(() => undefined);
   useSessionStore.getState().setSession(null);
-}
-
-export async function signInWithPassword(email: string, password: string): Promise<void> {
-  if (!isSupabaseConfigured) {
-    throw new Error('Supabase Auth is not configured. Please use GitHub Authentication.');
-  }
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-  if (data.session) {
-    const sbUser = data.session.user;
-    useSessionStore.getState().setSession({
-      access_token: data.session.access_token,
-      token_type: data.session.token_type,
-      user: {
-        id: sbUser.id,
-        userId: sbUser.id,
-        login: (sbUser.user_metadata?.user_name as string) || (sbUser.email?.split('@')[0] ?? 'developer'),
-        email: sbUser.email ?? null,
-        name: (sbUser.user_metadata?.full_name as string) || (sbUser.email?.split('@')[0] ?? 'Developer'),
-        avatar_url: sbUser.user_metadata?.avatar_url as string | undefined,
-        avatarUrl: sbUser.user_metadata?.avatar_url as string | undefined,
-        user_metadata: sbUser.user_metadata,
-      },
-      expires_at: data.session.expires_at,
-    });
-  }
-}
-
-export async function signUpWithPassword(email: string, password: string): Promise<{ needsConfirmation: boolean }> {
-  if (!isSupabaseConfigured) {
-    throw new Error('Supabase Auth is not configured. Please use GitHub Authentication.');
-  }
-  const { data, error } = await supabase.auth.signUp({ email, password });
-  if (error) throw error;
-  return { needsConfirmation: !data.session };
-}
-
-export async function sendPasswordReset(email: string): Promise<void> {
-  if (!isSupabaseConfigured) {
-    throw new Error('Supabase Auth is not configured. Please use GitHub Authentication.');
-  }
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/login`,
-  });
-  if (error) throw error;
 }
