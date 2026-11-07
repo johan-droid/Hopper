@@ -33,6 +33,7 @@ export function createPool(): pg.Pool {
   const isSsl =
     connectionString.includes('sslmode=require') ||
     connectionString.includes('supabase.co') ||
+    connectionString.includes('supabase.com') ||
     connectionString.includes('neon.tech') ||
     process.env.PGSSLMODE === 'require';
 
@@ -40,7 +41,7 @@ export function createPool(): pg.Pool {
     connectionString,
     max: parseInt(process.env.DB_POOL_MAX || '10', 10),
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT_MS || '10000', 10),
     ssl: isSsl ? { rejectUnauthorized: false } : undefined,
   });
 }
