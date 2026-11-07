@@ -34,6 +34,7 @@ import { createRepositoriesRouter } from './routes/repositories.js';
 import { createWorkspaceRouter } from './routes/workspaces.js';
 import { createUserRouter } from './routes/users.js';
 import { createAuthRouter } from './routes/auth.js';
+import { createCronRouter } from './routes/cron.js';
 
 export interface RuntimeConfig {
   isProduction: boolean;
@@ -238,6 +239,7 @@ export function createApp(options: CreateAppOptions = {}) {
   // Routers
   // ---------------------------------------------------------------------------
   app.use('/api/auth', createAuthRouter(userProfileRepo, workspaceRepo, orgRepo, repoRepo));
+  app.use('/api/cron', createCronRouter());
   app.use('/api/webhooks', createWebhooksRouter());
   app.use('/api/billing', createBillingRouter());
   app.use(
