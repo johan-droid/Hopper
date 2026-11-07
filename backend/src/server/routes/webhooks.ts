@@ -23,8 +23,6 @@ import {
 } from '../../lib/billing/stripe-handler.js';
 import { checkTenantRateLimit, claimWebhookDelivery } from '../../queue/coordination.js';
 import { enqueueWorkflowJob } from '../../queue/ci-queue.js';
-import { drainQueue, processQueuedJob } from '../../queue/consumer.js';
-import { getJobStore } from '../../queue/job-store.js';
 import { WorkflowJobEventData } from '../../queue/types.js';
 import { processWorkflowJob } from '../../workers/processors/workflow-job.processor.js';
 
@@ -146,46 +144,14 @@ export function createWebhooksRouter(): Router {
     }
 
     const published = enqueued.transport.published;
-    const transportIntentionallyDisabled = enqueued.transport.reason === 'transport_disabled';
 
-    if (published || transportIntentionallyDisabled) {
-      return res.status(202).json({
-        status: enqueued.duplicate ? 'already_queued' : 'queued',
-        jobId: enqueued.jobId,
-        githubJobId: eventData.githubJobId,
-        conclusion: eventData.conclusion,
-        delivery: published ? 'vercel-queue' : 'postgres-outbox',
-        receivedAt: new Date().toISOString(),
-      });
-    }
-
-    // 3. Queue publish failed unexpectedly: bounded inline processing keeps the
-    //    event from being lost, and the DB row remains for the drain as a net.
-    try {
-      const store = getJobStore();
-      const [job] = await store.claim({
-        workerId: `webhook-inline-${Date.now()}`,
-        limit: 1,
-        lockSeconds: 120,
-      });
-
-      if (job) {
-        const outcome = await processQueuedJob(job);
-        return res.status(200).json({ status: outcome.result.status, jobId: job.id });
-      }
-
-      const drained = await drainQueue({ workerId: `webhook-drain-${Date.now()}`, limit: 1 });
-      if (drained.completed > 0) {
-        return res.status(200).json({ status: 'processed_inline', jobId: enqueued.jobId });
-      }
-    } catch (err: any) {
-      console.error(`[GitHub] Inline fallback failed: ${err.message}`);
-    }
-
-    return res.status(503).json({
-      error: 'Event persisted but not yet delivered to a consumer',
+    return res.status(202).json({
+      status: enqueued.duplicate ? 'already_queued' : 'queued',
       jobId: enqueued.jobId,
-      retryable: true,
+      githubJobId: eventData.githubJobId,
+      conclusion: eventData.conclusion,
+      delivery: published ? 'vercel-queue' : 'postgres-outbox',
+      receivedAt: new Date().toISOString(),
     });
   });
 
