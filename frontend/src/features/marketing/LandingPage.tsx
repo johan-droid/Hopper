@@ -1,6 +1,7 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../lib/routes';
+import { useSession } from '../auth/useSession';
 import { Badge, Button, Card, Divider } from '../../components/ui/primitives';
 import {
   ArrowRight,
@@ -77,7 +78,17 @@ const TIERS = [
   { name: 'Small Team', price: '$29', runs: '1,000 runs / month', history: '90 days of history', note: 'Shared triage and alerts' },
 ];
 
-const LandingPage: React.FC = () => (
+const LandingPage: React.FC = () => {
+  const { isAuthenticated } = useSession();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate(ROUTES.overview, { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
+  return (
   <div className="min-h-screen bg-canvas">
     <header className="sticky top-0 z-20 border-b border-hairline bg-canvas/85 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 md:px-6">
@@ -337,6 +348,7 @@ const LandingPage: React.FC = () => (
       </div>
     </footer>
   </div>
-);
+  );
+};
 
 export default LandingPage;

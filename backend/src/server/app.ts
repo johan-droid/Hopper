@@ -279,6 +279,41 @@ export function createApp(options: CreateAppOptions = {}) {
     res.redirect(`/api/auth/github/callback${queryString}`);
   });
 
+  // Authoritative login callback: safely persist session token and transition user to app
+  app.get('/login/callback', (req: Request, res: Response) => {
+    const token = (req.query.token as string) || '';
+    const login = (req.query.login as string) || '';
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Authenticating Hopper...</title>
+  <style>
+    body { background: #0a0f1d; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    .card { text-align: center; background: #111827; border: 1px solid #1f2937; padding: 2.5rem 3rem; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+    .spinner { width: 36px; height: 36px; border: 3px solid #374151; border-top-color: #06b6d4; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1.25rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner"></div>
+    <div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 0.5rem;">Authenticating @${login || 'user'}</div>
+    <div style="color: #94a3b8; font-size: 0.875rem;">Connecting to your workspace...</div>
+  </div>
+  <script>
+    const token = ${JSON.stringify(token)};
+    if (token) {
+      localStorage.setItem('hopper_auth_token', token);
+    }
+    window.location.replace('/');
+  </script>
+</body>
+</html>`);
+  });
+
   app.get('/', (_req: Request, res: Response) => {
     res.json({
       service: 'Hopper CI Failure Diagnosis Engine API Gateway',

@@ -24,6 +24,12 @@
       }
     },
     {
+      "source": "/login/callback",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
       "source": "/assets/(.*)",
       "destination": {
         "service": "frontend"
@@ -46,7 +52,14 @@
       "destination": {
         "service": "frontend",
         "path": "/index.html"
-      }
+      },
+      "transforms": [
+        {
+          "type": "request.path",
+          "op": "set",
+          "args": "/index.html"
+        }
+      ]
     }
   ]
 }
