@@ -13,6 +13,7 @@
   },
   "scripts": {
     "dev": "node scripts/local/start.mjs",
+    "dev:puter": "npx serve -l 8080 puter",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "npm --prefix backend run dev",
     "dev:worker": "npm --prefix backend run worker",
