@@ -2,43 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import {
   initiateGitHubOAuth,
-  signInWithGitHubToken,
-  signInWithPassword,
-  signUpWithPassword,
-  sendPasswordReset,
+  signInWithDevAccount,
   useSession,
 } from './useSession';
-import { isSupabaseConfigured } from '../../lib/supabase';
 import { ROUTES } from '../../lib/routes';
 import {
   Button,
   Card,
-  Field,
   InlineNotice,
-  Input,
 } from '../../components/ui/primitives';
-import { Zap, Github, Key, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Zap, Github, ShieldCheck, Terminal } from 'lucide-react';
 
-type Mode = 'signin' | 'signup' | 'reset';
-
-const LoginPage: React.FC<{ initialMode?: Mode }> = ({ initialMode = 'signin' }) => {
+const LoginPage: React.FC = () => {
   const { isAuthenticated, status } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Mode & form state
-  const [mode, setMode] = useState<Mode>(initialMode);
-  const [personalAccessToken, setPersonalAccessToken] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [showLegacyEmailAuth, setShowLegacyEmailAuth] = useState(false);
-
-  React.useEffect(() => {
-    setMode(initialMode);
-  }, [initialMode]);
 
   const from = (location.state as { from?: string } | null)?.from ?? ROUTES.overview;
 
@@ -67,63 +49,25 @@ const LoginPage: React.FC<{ initialMode?: Mode }> = ({ initialMode = 'signin' })
     }
   };
 
-  const handlePatSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!personalAccessToken.trim()) {
-      setError('Please enter a GitHub Personal Access Token');
-      return;
-    }
-
+  const handleDevLogin = async () => {
     setError(null);
     setNotice(null);
     setBusy(true);
-
     try {
-      await signInWithGitHubToken(personalAccessToken.trim());
+      await signInWithDevAccount('johan-droid');
       navigate(from, { replace: true });
     } catch (caught) {
       setError(
         caught instanceof Error && caught.message
           ? caught.message
-          : 'Failed to authenticate with GitHub token. Please verify token permissions.'
+          : 'Failed to authenticate development account.'
       );
     } finally {
       setBusy(false);
     }
   };
 
-  const handleLegacyPasswordSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError(null);
-    setNotice(null);
-    setBusy(true);
-
-    try {
-      if (mode === 'reset') {
-        await sendPasswordReset(email);
-        setNotice('If that address has an account, a reset link is on its way.');
-      } else if (mode === 'signup') {
-        const { needsConfirmation } = await signUpWithPassword(email, password);
-        if (needsConfirmation) {
-          setNotice('Check your inbox to confirm the address, then sign in.');
-          setMode('signin');
-        } else {
-          navigate(from, { replace: true });
-        }
-      } else {
-        await signInWithPassword(email, password);
-        navigate(from, { replace: true });
-      }
-    } catch (caught) {
-      setError(
-        caught instanceof Error && caught.message
-          ? caught.message
-          : 'Authentication failed. Check your credentials and try again.'
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
+  const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
@@ -146,7 +90,7 @@ const LoginPage: React.FC<{ initialMode?: Mode }> = ({ initialMode = 'signin' })
               Sign in to Hopper
             </h1>
             <p className="mt-1 text-xs text-ink-secondary">
-              Hopper is GitHub-native. Authenticate to sync your organizations, installations, and CI/CD pipelines.
+              Hopper uses GitHub as the authoritative source of truth for identity, organizations, and repositories.
             </p>
           </div>
 
@@ -167,110 +111,55 @@ const LoginPage: React.FC<{ initialMode?: Mode }> = ({ initialMode = 'signin' })
               </div>
             ) : null}
 
-            {/* Primary GitHub OAuth Flow */}
-            <div className="space-y-4">
+            {/* Authoritative Single-Sign-On GitHub OAuth Flow */}
+            <div className="space-y-3">
               <Button
                 type="button"
                 variant="primary"
                 className="w-full justify-center gap-2 py-2.5 text-sm font-medium shadow-sm"
                 onClick={handleGitHubOAuth}
-                loading={busy && !personalAccessToken}
+                loading={busy}
                 disabled={status === 'loading'}
               >
                 <Github className="h-4 w-4" />
                 Continue with GitHub
               </Button>
 
-              <div className="relative flex items-center justify-center">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-hairline" />
-                </div>
-                <div className="relative bg-raised px-2 text-[11px] font-medium uppercase tracking-wider text-ink-muted">
-                  Or use a personal token
-                </div>
-              </div>
-
-              {/* Personal Access Token Flow */}
-              <form onSubmit={handlePatSubmit} className="space-y-3">
-                <Field
-                  label="GitHub Personal Access Token"
-                  htmlFor="pat-input"
-                  hint="Requires read:user, repo, and read:org scopes."
-                >
-                  <div className="relative">
-                    <Input
-                      id="pat-input"
-                      type="password"
-                      value={personalAccessToken}
-                      onChange={(e) => setPersonalAccessToken(e.target.value)}
-                      placeholder="ghp_... or github_pat_..."
-                      autoComplete="off"
-                      spellCheck="false"
-                      className="font-mono text-xs pr-8"
-                    />
-                    <Key className="absolute right-2.5 top-2.5 h-3.5 w-3.5 text-ink-muted pointer-events-none" />
+              {/* Seamless Development Authentication (Bypasses token input completely) */}
+              {isDevelopment ? (
+                <div className="pt-2">
+                  <div className="relative my-3 flex items-center justify-center">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-hairline" />
+                    </div>
+                    <div className="relative bg-raised px-2 text-[10px] font-medium uppercase tracking-wider text-ink-muted">
+                      Local Development
+                    </div>
                   </div>
-                </Field>
 
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  className="w-full justify-center gap-2"
-                  loading={busy && Boolean(personalAccessToken)}
-                  disabled={!personalAccessToken.trim() || status === 'loading'}
-                >
-                  Sign in with Token
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Button>
-              </form>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full justify-center gap-2 py-2 text-xs font-normal"
+                    onClick={handleDevLogin}
+                    loading={busy}
+                    disabled={status === 'loading'}
+                  >
+                    <Terminal className="h-3.5 w-3.5 text-accent" />
+                    Quick Sign-In (@johan-droid)
+                  </Button>
+                </div>
+              ) : null}
             </div>
 
             <div className="mt-5 rounded-md bg-inset/50 p-3 text-[11px] text-ink-muted border border-hairline">
               <div className="flex items-start gap-2">
                 <ShieldCheck className="h-4 w-4 text-accent shrink-0 mt-0.5" />
                 <span>
-                  Hopper establishes a verified session, provisions your personal workspace, and auto-discovers your repositories and workflow failures.
+                  No manual API tokens required. Authenticating provisions your personal workspace, links your active GitHub identity, and synchronizes your repositories automatically.
                 </span>
               </div>
             </div>
-
-            {/* Supabase Password Login (Only if configured) */}
-            {isSupabaseConfigured ? (
-              <div className="mt-5 border-t border-hairline pt-3 text-center">
-                <button
-                  type="button"
-                  className="text-xs text-ink-muted hover:text-ink transition-colors"
-                  onClick={() => setShowLegacyEmailAuth(!showLegacyEmailAuth)}
-                >
-                  {showLegacyEmailAuth ? 'Hide Email / Password Sign In' : 'Legacy Email Sign In (Supabase)'}
-                </button>
-
-                {showLegacyEmailAuth ? (
-                  <form onSubmit={handleLegacyPasswordSubmit} className="mt-4 space-y-3 text-left">
-                    <Field label="Email" htmlFor="email">
-                      <Input
-                        id="email"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="you@company.com"
-                      />
-                    </Field>
-                    <Field label="Password" htmlFor="password">
-                      <Input
-                        id="password"
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                      />
-                    </Field>
-                    <Button type="submit" variant="secondary" className="w-full" loading={busy}>
-                      {mode === 'signup' ? 'Create Account' : 'Sign in with Password'}
-                    </Button>
-                  </form>
-                ) : null}
-              </div>
-            ) : null}
           </Card>
 
           <p className="mt-4 text-center text-[11px] text-ink-muted">

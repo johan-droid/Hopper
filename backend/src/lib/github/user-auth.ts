@@ -136,6 +136,8 @@ export async function fetchGitHubUser(accessToken: string): Promise<GitHubUserPr
   if (
     accessToken.startsWith('gho_mock_') ||
     accessToken.startsWith('ghp_mock_') ||
+    accessToken.startsWith('gho_dev_') ||
+    accessToken.startsWith('dev_') ||
     accessToken.startsWith('test_') ||
     process.env.AI_PROVIDER === 'mock'
   ) {
@@ -222,7 +224,7 @@ export function createSessionToken(
   userId: string,
   userProfileId: string,
   workspaceId: string,
-  options: { expiresInSeconds?: number } = {}
+  options: { expiresInSeconds?: number; githubToken?: string } = {}
 ): string {
   const secret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || DEFAULT_DEV_JWT_SECRET;
   const now = Math.floor(Date.now() / 1000);
@@ -241,6 +243,7 @@ export function createSessionToken(
       email: user.email,
       name: user.name,
       avatar_url: user.avatarUrl,
+      github_token: options.githubToken,
       role: 'authenticated',
       iat: now,
       nbf: now - 10,

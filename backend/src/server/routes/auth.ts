@@ -127,8 +127,10 @@ export function createAuthRouter(
         console.warn(`[AuthCallback] Initial sync warning: ${syncErr.message}`);
       }
 
-      // 6. Mint Hopper Session Token
-      const token = createSessionToken(ghUser, userUuid, profile.id, activeWorkspaceId);
+      // 6. Mint Hopper Session Token with authoritative GitHub access token
+      const token = createSessionToken(ghUser, userUuid, profile.id, activeWorkspaceId, {
+        githubToken: accessToken,
+      });
 
       // 7. Complete login
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -206,7 +208,81 @@ export function createAuthRouter(
       });
 
       // 5. Mint Hopper Session JWT
-      const sessionToken = createSessionToken(ghUser, userUuid, profile.id, activeWorkspaceId);
+      const sessionToken = createSessionToken(ghUser, userUuid, profile.id, activeWorkspaceId, {
+        githubToken: ghToken,
+      });
+
+      res.json({
+        success: true,
+        token: sessionToken,
+        user: ghUser,
+        profile,
+        workspaceId: activeWorkspaceId,
+        sync: {
+          organizationsSynced: syncResult.stats.organizationsSynced,
+          repositoriesSynced: syncResult.stats.repositoriesSynced,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * POST /api/auth/dev-login
+   * One-click development authentication using the default GitHub profile.
+   * Eliminates the need for manual API tokens during development.
+   */
+  router.post('/dev-login', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const isProduction = process.env.NODE_ENV === 'production';
+      if (isProduction) {
+        throw ApiError.forbidden('Development authentication is disabled in production environments');
+      }
+
+      const login = (req.body?.login as string) || 'johan-droid';
+      const ghUser = await fetchGitHubUser(`gho_dev_${login}`);
+      const userUuid = githubIdToUuid(ghUser.id);
+
+      const profile = await userProfileRepo.upsert({
+        userId: userUuid,
+        username: ghUser.login,
+        fullName: ghUser.name,
+        avatarUrl: ghUser.avatarUrl,
+        bio: ghUser.company || undefined,
+        role: 'developer',
+      });
+
+      const userWorkspaces = await workspaceRepo.listByUserId(profile.id);
+      let activeWorkspaceId = profile.current_workspace_id;
+
+      if (!activeWorkspaceId || !userWorkspaces.some((w) => w.id === activeWorkspaceId)) {
+        if (userWorkspaces.length > 0) {
+          activeWorkspaceId = userWorkspaces[0].id;
+        } else {
+          const newWs = await workspaceRepo.create({
+            name: `${ghUser.login}'s Workspace`,
+            type: 'personal',
+            ownerId: profile.id,
+            description: `Default personal workspace for @${ghUser.login}`,
+            isPublic: false,
+          });
+          activeWorkspaceId = newWs.id;
+        }
+        await userProfileRepo.updateCurrentWorkspace(profile.id, activeWorkspaceId);
+      }
+
+      // Initial sync using authoritative session
+      const syncResult = await syncService.syncUserGitHubResources({
+        githubToken: `gho_dev_${login}`,
+        githubUser: ghUser,
+        userProfileId: profile.id,
+        workspaceId: activeWorkspaceId,
+      });
+
+      const sessionToken = createSessionToken(ghUser, userUuid, profile.id, activeWorkspaceId, {
+        githubToken: `gho_dev_${login}`,
+      });
 
       res.json({
         success: true,
@@ -273,6 +349,7 @@ export function createAuthRouter(
       };
 
       const githubToken =
+        req.user?.github_token ||
         (req.body?.githubToken as string) ||
         (req.headers['x-github-token'] as string) ||
         undefined;

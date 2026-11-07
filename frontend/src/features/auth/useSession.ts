@@ -257,6 +257,17 @@ export async function signInWithGitHubToken(token: string): Promise<HopperSessio
 }
 
 /**
+ * Direct development sign-in without requiring manual tokens.
+ */
+export async function signInWithDevAccount(login?: string): Promise<HopperSession> {
+  const result = await api.loginDev(login);
+  localStorage.setItem('hopper_auth_token', result.token);
+  const session = buildHopperSession(result.token, result.user);
+  useSessionStore.getState().setSession(session);
+  return session;
+}
+
+/**
  * Syncs user GitHub resources (organizations and repositories) into Hopper.
  */
 export async function syncGitHub(payload?: { githubToken?: string; workspaceId?: string }) {

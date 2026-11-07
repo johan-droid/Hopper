@@ -98,7 +98,7 @@ describe('GitHub Authentication & Synchronization Engine', () => {
     const token = authData.token;
     const workspaceId = authData.workspaceId;
 
-    // 2. Execute explicit sync
+    // 2. Execute explicit sync without passing any manual API token (session is source of truth)
     const syncRes = await fetch(`${baseUrl}/api/auth/sync`, {
       method: 'POST',
       headers: {
@@ -106,7 +106,6 @@ describe('GitHub Authentication & Synchronization Engine', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        githubToken: 'ghp_mock_sync_token',
         workspaceId,
       }),
     });
@@ -154,5 +153,32 @@ describe('GitHub Authentication & Synchronization Engine', () => {
       body: JSON.stringify({ token: '' }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it('authenticates via dev-login in non-production environments without manual tokens', async () => {
+    const res = await fetch(`${baseUrl}/api/auth/dev-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login: 'johan-droid' }),
+    });
+
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.success).toBe(true);
+    expect(data.token).toBeDefined();
+    expect(data.user.login).toBe('johan-droid');
+    expect(data.workspaceId).toBeDefined();
+    expect(data.sync.repositoriesSynced).toBeGreaterThanOrEqual(1);
+
+    // Verify session carries authoritative access and works on sync
+    const syncRes = await fetch(`${baseUrl}/api/auth/sync`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${data.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+    expect(syncRes.status).toBe(200);
   });
 });

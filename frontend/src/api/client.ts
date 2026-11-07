@@ -334,6 +334,38 @@ export const api = {
       })
     ),
 
+  loginDev: (login?: string): Promise<{
+    success: boolean;
+    token: string;
+    user: Record<string, any>;
+    profile: UserProfile;
+    workspaceId: string;
+    sync?: {
+      organizationsSynced: number;
+      repositoriesSynced: number;
+    };
+  }> =>
+    request(
+      '/api/auth/dev-login',
+      {
+        method: 'POST',
+        body: JSON.stringify({ login: login || 'johan-droid' }),
+      },
+      z.object({
+        success: z.boolean(),
+        token: z.string(),
+        user: z.record(z.any()),
+        profile: UserProfileSchema,
+        workspaceId: z.string(),
+        sync: z
+          .object({
+            organizationsSynced: z.number(),
+            repositoriesSynced: z.number(),
+          })
+          .optional(),
+      })
+    ),
+
   syncGitHub: (payload?: {
     githubToken?: string;
     workspaceId?: string;

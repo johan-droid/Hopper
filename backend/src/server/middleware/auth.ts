@@ -10,6 +10,7 @@ export interface AuthenticatedUser {
   login?: string;
   github_user_id?: number;
   avatar_url?: string;
+  github_token?: string;
   app_metadata?: Record<string, any>;
   user_metadata?: Record<string, any>;
 }
@@ -190,6 +191,7 @@ export function requireAuth(userProfileRepo?: UserProfileRepository) {
         login: payload.login || payload.user_metadata?.user_name || (payload.email ? payload.email.split('@')[0] : 'user'),
         github_user_id: payload.github_user_id,
         avatar_url: payload.avatar_url || payload.user_metadata?.avatar_url,
+        github_token: payload.github_token || payload.github_access_token,
         app_metadata: payload.app_metadata,
         user_metadata: payload.user_metadata,
       };
@@ -244,6 +246,7 @@ export function optionalAuth() {
             login: payload.login || (payload.email ? payload.email.split('@')[0] : 'user'),
             github_user_id: payload.github_user_id,
             avatar_url: payload.avatar_url,
+            github_token: payload.github_token || payload.github_access_token,
           };
         }
       } catch (_err) {
