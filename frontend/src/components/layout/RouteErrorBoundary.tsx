@@ -99,3 +99,4 @@ export const RouteErrorBoundary: React.FC = () => {
 };
 
 export default RouteErrorBoundary;
+
