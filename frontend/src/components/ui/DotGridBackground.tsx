@@ -61,3 +61,4 @@ export const DotGridBackground: React.FC<DotGridBackgroundProps> = ({
 };
 
 export default DotGridBackground;
+
