@@ -65,3 +65,4 @@ describe('Task Lifecycle State Machine & Execution Policies', () => {
     expect(isValidTransition('awaiting_execution', 'cancelled')).toBe(true);
   });
 });
+

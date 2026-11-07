@@ -42,3 +42,4 @@ Before deploying Hopper live to Vercel and Supabase:
   - `GITHUB_APP_PRIVATE_KEY`
 - [ ] In Supabase SQL Editor:
   - Run `backend/supabase/migrations/0001_initial_schema.sql` through `0010_durable_queue_and_coordination.sql`.
+

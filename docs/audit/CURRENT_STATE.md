@@ -93,3 +93,4 @@ Hopper is structured as a mono-repository containing:
    `getInstallationToken()` in `backend/src/lib/github/app-auth.ts` returned synthetic tokens when `GITHUB_APP_PRIVATE_KEY` was missing. Must strictly throw in production.
 4. **Primary Frontend AI Integration**:
    The primary React UI (`InvestigationPage.tsx`) must directly embed Puter.js AI capabilities with model selection rather than relying solely on a link to `/puter/`.
+

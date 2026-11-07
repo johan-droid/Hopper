@@ -68,3 +68,4 @@ flowchart TD
 - **Terminal States**: `completed`, `needs_approval`, `blocked`, `cancelled`, `failed`.
 - **No Untrusted Execution in Control Plane**: Untrusted repository build scripts are prohibited from running inside Vercel API functions.
 - **Human Approval Gate**: Merging is always a human decision. Pull request creation requires explicit authorization. Auto-merge is strictly disabled.
+
