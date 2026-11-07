@@ -63,3 +63,4 @@ http://localhost:5173/puter/
 - **Client-Side Secret Redaction**: Before logs are passed to `puter.ai.chat`, credentials (AWS keys, GitHub tokens, Bearer headers, passwords) are scrubbed via deterministic regular expressions.
 - **Deterministic Fingerprinting**: Volatile line numbers, UUIDs, timestamps, and memory hex addresses are normalized before generating the canonical SHA-256 hash.
 - **Attribution**: Includes obligatory link to `https://developer.puter.com` labeled **"Powered by Puter"** in accordance with Puter platform guidelines.
+
