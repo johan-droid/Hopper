@@ -4,6 +4,7 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
   resolve: {
     dedupe: ['react', 'react-dom'],
     alias: {
