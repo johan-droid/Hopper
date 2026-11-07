@@ -50,18 +50,18 @@ required, and **no Cloudflare variable exists**.
 > Vercel Queues authenticates via OIDC automatically — **no queue API key or
 > credential variable is required**. Do not invent one.
 
-## 4. Authentication — Supabase Auth
+## 4. Authentication — GitHub OAuth & Supabase Auth
 
 | Variable | Purpose | Required | Scope | Env | Secret | Source |
 |---|---|---|---|---|---|---|
-| `SUPABASE_URL` | Project URL; also derives expected JWT issuer (`<url>/auth/v1`) | Yes | BE | All | No | Supabase → API |
-| `SUPABASE_JWT_SECRET` | HS256 verification secret (either this **or** the public key) | Yes* | BE | All | **Yes** | Supabase → API → JWT settings |
+| `JWT_SECRET` | Primary HS256 secret for session tokens & signed OAuth HMAC state | Yes* | BE | All | **Yes** | Generated secure token |
+| `SUPABASE_URL` | Project URL; also derives expected JWT issuer (`<url>/auth/v1`) | No | BE | All | No | Supabase → API |
+| `SUPABASE_JWT_SECRET` | HS256 verification secret fallback | Yes* | BE | All | **Yes** | Supabase → API → JWT settings |
 | `SUPABASE_JWT_PUBLIC_KEY` | RS256/ES256 verification key | Yes* | BE | All | No (public) | Supabase → API → JWT keys |
-| `VITE_SUPABASE_URL` | Browser client URL | Yes | FE | All | No | Supabase → API |
-| `VITE_SUPABASE_ANON_KEY` | Browser anon key (public by design; RLS is the boundary) | Yes | FE | All | No | Supabase → API |
+| `VITE_SUPABASE_URL` | Browser client URL | No | FE | All | No | Supabase → API |
+| `VITE_SUPABASE_ANON_KEY` | Browser anon key (public by design; RLS is the boundary) | No | FE | All | No | Supabase → API |
 
-\* Exactly one verification key must be present. Production boot throws if both
-are missing.
+\* At least one verification secret (`JWT_SECRET`, `SUPABASE_JWT_SECRET`, or `SUPABASE_JWT_PUBLIC_KEY`) must be present in production.
 
 **Never** place `SUPABASE_SERVICE_ROLE_KEY` in the frontend or in `VITE_*`.
 
@@ -83,9 +83,10 @@ are missing.
 
 | Variable | Purpose | Required | Scope | Env | Secret | Source |
 |---|---|---|---|---|---|---|
-| `AI_PROVIDER` | Strict single provider: `openai`, `anthropic`, or `mock` | Yes | BE | All | No | You (`mock` by default) |
-| `AI_MODEL` | Model id for the selected provider | Yes | BE | All | No | e.g. `gpt-4o-mini`, `claude-3-5-haiku-20241022` |
+| `AI_PROVIDER` | Provider: `puter`, `openai`, `anthropic`, or `mock` | Yes | BE | All | No | You (`mock` by default) |
+| `AI_MODEL` | Model id for the selected provider | Yes | BE | All | No | e.g. `deepseek-chat`, `gpt-4o-mini`, `claude-3-5-haiku-20241022` |
 | `EMBEDDING_MODEL` | Embedding model; must stay 1536-dim for pgvector | No (`text-embedding-3-small`) | BE | All | No | OpenAI |
+| `PUTER_AUTH_TOKEN` | Puter background API token (browser uses free user allowance) | If `AI_PROVIDER=puter` (backend) | BE | All | **Yes** | Puter account settings |
 | `OPENAI_API_KEY` | OpenAI key (diagnosis + embeddings) | If `AI_PROVIDER=openai` | BE | All | **Yes** | OpenAI dashboard |
 | `ANTHROPIC_API_KEY` | Anthropic key | If `AI_PROVIDER=anthropic` | BE | All | **Yes** | Anthropic console |
 | `AI_MONTHLY_BUDGET_USD` | Monthly AI spend ceiling enforced by the ledger | No (`500`) | BE | All | No | Policy |

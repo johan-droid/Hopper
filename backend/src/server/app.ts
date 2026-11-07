@@ -92,10 +92,16 @@ export function validateRuntimeConfig(): RuntimeConfig {
       !!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_API_KEY.includes('mock');
     const hasOpenAI =
       !!process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes('mock');
-    if (!hasAnthropic && !hasOpenAI) {
-      throw new Error(
-        '[Hopper] AI provider selected but no valid ANTHROPIC_API_KEY or OPENAI_API_KEY found'
-      );
+    const hasPuter =
+      !!process.env.PUTER_AUTH_TOKEN && !process.env.PUTER_AUTH_TOKEN.includes('mock');
+    if (aiProvider === 'anthropic' && !hasAnthropic) {
+      throw new Error('[Hopper] AI provider anthropic selected but no valid ANTHROPIC_API_KEY found');
+    } else if (aiProvider === 'openai' && !hasOpenAI) {
+      throw new Error('[Hopper] AI provider openai selected but no valid OPENAI_API_KEY found');
+    } else if (aiProvider === 'puter' && !hasPuter) {
+      throw new Error('[Hopper] AI provider puter selected but no valid PUTER_AUTH_TOKEN found');
+    } else if (!['anthropic', 'openai', 'puter'].includes(aiProvider)) {
+      throw new Error(`[Hopper] Unsupported AI provider: ${aiProvider}`);
     }
   }
 
