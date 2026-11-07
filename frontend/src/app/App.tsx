@@ -72,6 +72,7 @@ const router = createBrowserRouter([
   { path: ROUTES.landing, element: withSuspense(<LandingPage />), errorElement: <RouteErrorBoundary /> },
   { path: ROUTES.login, element: withSuspense(<LoginPage />), errorElement: <RouteErrorBoundary /> },
   { path: '/login/callback', element: withSuspense(<LoginPage />), errorElement: <RouteErrorBoundary /> },
+  { path: '/auth', element: withSuspense(<LoginPage />), errorElement: <RouteErrorBoundary /> },
   { path: ROUTES.signup, element: withSuspense(<LoginPage />), errorElement: <RouteErrorBoundary /> },
   {
     path: '/app',

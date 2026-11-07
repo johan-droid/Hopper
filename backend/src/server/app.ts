@@ -273,6 +273,12 @@ export function createApp(options: CreateAppOptions = {}) {
 
   app.use(express.static('public'));
 
+  // OAuth fallback: handle /auth redirects and forward to the authoritative callback
+  app.get('/auth', (req: Request, res: Response) => {
+    const queryString = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(`/api/auth/github/callback${queryString}`);
+  });
+
   app.get('/', (_req: Request, res: Response) => {
     res.json({
       service: 'Hopper CI Failure Diagnosis Engine API Gateway',
