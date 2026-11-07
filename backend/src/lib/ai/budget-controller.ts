@@ -38,11 +38,41 @@ export const PRICING_REGISTRY: Record<string, ModelPricing> = {
     cacheWritePerMillion: 1.0,
     cacheReadPerMillion: 0.08,
   },
+  'claude-3-5-sonnet-20241022': {
+    inputPerMillion: 3.0,
+    outputPerMillion: 15.0,
+    cacheWritePerMillion: 3.75,
+    cacheReadPerMillion: 0.30,
+  },
   'gpt-4o-mini': {
     inputPerMillion: 0.15,
     outputPerMillion: 0.6,
     cacheWritePerMillion: 0.15,
     cacheReadPerMillion: 0.075,
+  },
+  'gpt-4o': {
+    inputPerMillion: 2.5,
+    outputPerMillion: 10.0,
+    cacheWritePerMillion: 1.25,
+    cacheReadPerMillion: 1.25,
+  },
+  'deepseek-chat': {
+    inputPerMillion: 0.14,
+    outputPerMillion: 0.28,
+    cacheWritePerMillion: 0.14,
+    cacheReadPerMillion: 0.014,
+  },
+  'qwen-2.5-coder-32b-instruct': {
+    inputPerMillion: 0.20,
+    outputPerMillion: 0.40,
+    cacheWritePerMillion: 0.20,
+    cacheReadPerMillion: 0.02,
+  },
+  'gemini-1.5-flash': {
+    inputPerMillion: 0.075,
+    outputPerMillion: 0.30,
+    cacheWritePerMillion: 0.075,
+    cacheReadPerMillion: 0.01875,
   },
 };
 
@@ -107,7 +137,8 @@ export class AiBudgetController {
    */
   async reserveBudget(params: ReserveBudgetParams): Promise<BudgetReservationResult> {
     const pricing = PRICING_REGISTRY[params.model];
-    if (!pricing && params.provider !== 'mock') {
+    const isFreeTierProvider = params.provider === 'mock' || params.provider === 'puter';
+    if (!pricing && !isFreeTierProvider) {
       return {
         allowed: false,
         reservedAmountUsd: 0,
@@ -118,7 +149,6 @@ export class AiBudgetController {
     }
 
     const idempotencyKey = params.idempotencyKey || `res_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
-    const isFreeTierProvider = params.provider === 'mock';
     const reservationAmount = isFreeTierProvider ? 0.0001 : STANDARD_RESERVATION_USD;
 
     return this.executeTx(async (tx) => {

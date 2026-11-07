@@ -148,7 +148,9 @@ export class HopperEngine {
     }
 
     // Record run usage in organization
-    await this.orgRepo.incrementRunsUsed(pipelineContext.org.id);
+    if (typeof (this.orgRepo as any)?.incrementRunsUsed === 'function') {
+      await (this.orgRepo as any).incrementRunsUsed(pipelineContext.org.id);
+    }
 
     // 3. Fetch Raw Log Stream (if not already present in event)
     const rawLog = await this.integration.fetchRawLog({

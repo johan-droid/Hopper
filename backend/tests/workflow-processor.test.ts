@@ -206,6 +206,7 @@ Process completed with exit code 1.
     const mockDeps = {
       orgRepo: {
         upsert: async () => mockOrgExhausted,
+        incrementRunsUsed: async () => mockOrgExhausted,
       } as any,
       repoRepo: {
         upsert: async () => ({ id: 'repo-1' }),

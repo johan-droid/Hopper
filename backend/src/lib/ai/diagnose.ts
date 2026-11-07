@@ -324,7 +324,7 @@ export async function callAnthropicLlm(
 
         const currentRemaining = overallDeadlineMs - (Date.now() - overallStartTime);
         if (delayMs >= currentRemaining) {
-          throw new Error(`Overall AI request deadline of ${overallDeadlineMs}ms would be exceeded by backoff delay (${Math.round(delayMs)}ms)`);
+          throw new Error(`Overall AI request deadline of ${overallDeadlineMs}ms exceeded by backoff delay (${Math.round(delayMs)}ms)`);
         }
 
         await new Promise((r) => setTimeout(r, delayMs));
@@ -479,7 +479,7 @@ export async function callOpenAiLlm(
 
         const currentRemaining = overallDeadlineMs - (Date.now() - overallStartTime);
         if (delayMs >= currentRemaining) {
-          throw new Error(`Overall AI request deadline of ${overallDeadlineMs}ms would be exceeded by backoff delay (${Math.round(delayMs)}ms)`);
+          throw new Error(`Overall AI request deadline of ${overallDeadlineMs}ms exceeded by backoff delay (${Math.round(delayMs)}ms)`);
         }
 
         await new Promise((r) => setTimeout(r, delayMs));
@@ -1030,7 +1030,9 @@ export async function synthesizeDiagnosis(
     const anthropicKey = process.env.ANTHROPIC_API_KEY || process.env.AI_API_KEY;
     if (anthropicKey && !anthropicKey.includes('mock')) {
       const budgetController = new AiBudgetController();
-      const model = process.env.AI_MODEL || 'claude-3-5-haiku-20241022';
+      const model = (process.env.AI_MODEL && process.env.AI_MODEL.startsWith('claude'))
+        ? process.env.AI_MODEL
+        : 'claude-3-5-haiku-20241022';
 
       let reservation: any;
       try {
@@ -1091,7 +1093,9 @@ export async function synthesizeDiagnosis(
     const openAiKey = process.env.OPENAI_API_KEY || process.env.AI_API_KEY;
     if (openAiKey && !openAiKey.includes('mock')) {
       const budgetController = new AiBudgetController();
-      const model = process.env.AI_MODEL || 'gpt-4o-mini';
+      const model = (process.env.AI_MODEL && (process.env.AI_MODEL.startsWith('gpt') || process.env.AI_MODEL.startsWith('o1') || process.env.AI_MODEL.startsWith('text-')))
+        ? process.env.AI_MODEL
+        : 'gpt-4o-mini';
 
       let reservation: any;
       try {

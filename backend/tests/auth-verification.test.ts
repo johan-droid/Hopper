@@ -172,9 +172,11 @@ describe('Phase 12: Independent Authentication Verification (10-Point Suite)', (
   it('11. Strictly blocks default dev secret fallback when NODE_ENV is production', () => {
     const prevNodeEnv = process.env.NODE_ENV;
     const prevSupabaseSecret = process.env.SUPABASE_JWT_SECRET;
+    const prevJwtSecret = process.env.JWT_SECRET;
     try {
       process.env.NODE_ENV = 'production';
       delete process.env.SUPABASE_JWT_SECRET;
+      delete process.env.JWT_SECRET;
 
       const token = createHs256Token({
         sub: 'prod-user',
@@ -187,6 +189,7 @@ describe('Phase 12: Independent Authentication Verification (10-Point Suite)', (
     } finally {
       process.env.NODE_ENV = prevNodeEnv;
       if (prevSupabaseSecret) process.env.SUPABASE_JWT_SECRET = prevSupabaseSecret;
+      if (prevJwtSecret) process.env.JWT_SECRET = prevJwtSecret;
     }
   });
 

@@ -134,7 +134,14 @@ export async function runEntireLifecycle(rootDir: string = process.cwd()): Promi
     // -------------------------------------------------------------------------
     await executeStage(5, 'Unit & Integration Automated Test Suite', async () => {
       try {
-        execSync('npx vitest run --no-cache', { cwd: rootDir, stdio: 'pipe' });
+        execSync('npx vitest run --no-cache', {
+          cwd: rootDir,
+          env: {
+            ...process.env,
+            NODE_ENV: 'test',
+          },
+          stdio: 'pipe',
+        });
       } catch (err: any) {
         throw new Error(`Test suite execution failed: ${err.stderr?.toString() || err.message}`);
       }

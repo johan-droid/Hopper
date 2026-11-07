@@ -81,7 +81,7 @@ export function verifyJwtToken(token: string, options: JwtVerificationOptions = 
     const isProduction = process.env.NODE_ENV === 'production';
     const configuredSecret = options.secret || process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET;
 
-    if (isProduction && !configuredSecret) {
+    if (isProduction && (!configuredSecret || configuredSecret === DEFAULT_DEV_JWT_SECRET)) {
       throw ApiError.internal('JWT verification failed: JWT_SECRET or SUPABASE_JWT_SECRET must be explicitly configured in production environments');
     }
 
@@ -152,9 +152,22 @@ export function verifyJwtToken(token: string, options: JwtVerificationOptions = 
   }
 
   // 8. Issuer check (iss)
-  const expectedIss = options.expectedIssuer ?? (process.env.SUPABASE_URL ? `${process.env.SUPABASE_URL}/auth/v1` : undefined);
-  if (expectedIss && payload.iss && payload.iss !== expectedIss) {
-    throw ApiError.unauthorized(`Invalid token issuer: expected "${expectedIss}", got "${payload.iss}"`);
+  if (options.expectedIssuer) {
+    if (payload.iss && payload.iss !== options.expectedIssuer) {
+      throw ApiError.unauthorized(`Invalid token issuer: expected "${options.expectedIssuer}", got "${payload.iss}"`);
+    }
+  } else if (payload.iss) {
+    const allowedIssuers = new Set<string>([
+      'https://hopper.dev',
+      'http://localhost:3000',
+    ]);
+    if (process.env.APP_URL) allowedIssuers.add(process.env.APP_URL);
+    if (process.env.SUPABASE_URL) allowedIssuers.add(`${process.env.SUPABASE_URL}/auth/v1`);
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) allowedIssuers.add(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1`);
+
+    if (!allowedIssuers.has(payload.iss)) {
+      throw ApiError.unauthorized(`Invalid token issuer: got "${payload.iss}"`);
+    }
   }
 
   // 9. Subject identity check (sub)
