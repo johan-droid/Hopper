@@ -93,9 +93,9 @@ export const Topbar: React.FC<{ onOpenMobileNav: () => void }> = ({ onOpenMobile
           href="/puter/"
           target="_blank"
           rel="noopener noreferrer"
-          className="hidden md:inline-flex items-center gap-1.5 rounded-md border border-cyan/40 bg-cyan/10 px-2 py-1 text-[11px] font-medium text-cyan hover:bg-cyan/20 transition-colors"
+          className="hidden md:inline-flex items-center gap-1.5 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[11px] font-medium text-cyan-400 hover:bg-cyan-500/20 transition-colors"
         >
-          <Sparkles className="h-3.5 w-3.5 text-cyan" aria-hidden />
+          <Sparkles className="h-3.5 w-3.5 text-cyan-400" aria-hidden />
           <span>Puter AI Serverless</span>
         </a>
       </Tooltip>
