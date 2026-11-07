@@ -10,6 +10,7 @@ import { useSessionBootstrap } from '../features/auth/useSession';
 import { useThemeApplication } from '../components/layout/Sidebar';
 import { WorkspaceProvider } from '../features/workspace/WorkspaceProvider';
 import { AppShell } from '../components/layout/AppShell';
+import { RouteErrorBoundary } from '../components/layout/RouteErrorBoundary';
 import { ToastProvider } from '../components/ui/feedback';
 import { ROUTES } from '../lib/routes';
 import { Skeleton } from '../components/ui/primitives';
@@ -68,13 +69,14 @@ const Shell: React.FC = () => (
 );
 
 const router = createBrowserRouter([
-  { path: ROUTES.landing, element: withSuspense(<LandingPage />) },
-  { path: ROUTES.login, element: withSuspense(<LoginPage />) },
-  { path: '/login/callback', element: withSuspense(<LoginPage />) },
-  { path: ROUTES.signup, element: withSuspense(<LoginPage />) },
+  { path: ROUTES.landing, element: withSuspense(<LandingPage />), errorElement: <RouteErrorBoundary /> },
+  { path: ROUTES.login, element: withSuspense(<LoginPage />), errorElement: <RouteErrorBoundary /> },
+  { path: '/login/callback', element: withSuspense(<LoginPage />), errorElement: <RouteErrorBoundary /> },
+  { path: ROUTES.signup, element: withSuspense(<LoginPage />), errorElement: <RouteErrorBoundary /> },
   {
     path: '/app',
     element: <Shell />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       { index: true, element: <Navigate to={ROUTES.overview} replace /> },
       { path: 'overview', element: withSuspense(<OverviewPage />) },
@@ -101,7 +103,7 @@ const router = createBrowserRouter([
       { path: '*', element: withSuspense(<NotFoundPage />) },
     ],
   },
-  { path: '*', element: withSuspense(<NotFoundPage />) },
+  { path: '*', element: withSuspense(<NotFoundPage />), errorElement: <RouteErrorBoundary /> },
 ]);
 
 const AppRoot: React.FC = () => {

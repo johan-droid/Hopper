@@ -280,6 +280,30 @@ export async function initiateGitHubOAuth(): Promise<void> {
 }
 
 /**
+ * Direct development sign-in without requiring manual tokens.
+ * Provided for development environments, local debugging, and backwards compatibility.
+ */
+export async function signInWithDevAccount(login?: string): Promise<HopperSession> {
+  const result = await api.loginDev(login);
+  localStorage.setItem('hopper_auth_token', result.token);
+  const session = buildHopperSession(result.token, result.user);
+  useSessionStore.getState().setSession(session);
+  return session;
+}
+
+/**
+ * Direct token authentication (PAT / OAuth token).
+ * Provided for CLI / programmatic / test authentication.
+ */
+export async function signInWithGitHubToken(token: string): Promise<HopperSession> {
+  const result = await api.loginWithGitHubToken(token);
+  localStorage.setItem('hopper_auth_token', result.token);
+  const session = buildHopperSession(result.token, result.user);
+  useSessionStore.getState().setSession(session);
+  return session;
+}
+
+/**
  * Syncs user GitHub resources (organizations and repositories) into Hopper.
  */
 export async function syncGitHub(payload?: { githubToken?: string; workspaceId?: string }) {
