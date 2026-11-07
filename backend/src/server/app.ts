@@ -33,6 +33,7 @@ import { createSignaturesRouter } from './routes/signatures.js';
 import { createRepositoriesRouter } from './routes/repositories.js';
 import { createWorkspaceRouter } from './routes/workspaces.js';
 import { createUserRouter } from './routes/users.js';
+import { createAuthRouter } from './routes/auth.js';
 
 export interface RuntimeConfig {
   isProduction: boolean;
@@ -64,9 +65,9 @@ export function validateRuntimeConfig(): RuntimeConfig {
     if (!process.env.GITHUB_APP_PRIVATE_KEY?.trim()) {
       throw new Error('[Hopper] Missing mandatory environment variable: GITHUB_APP_PRIVATE_KEY');
     }
-    if (!process.env.SUPABASE_JWT_SECRET && !process.env.SUPABASE_JWT_PUBLIC_KEY) {
+    if (!process.env.JWT_SECRET && !process.env.SUPABASE_JWT_SECRET && !process.env.SUPABASE_JWT_PUBLIC_KEY) {
       throw new Error(
-        '[Hopper] JWT verification requires SUPABASE_JWT_SECRET or SUPABASE_JWT_PUBLIC_KEY in production'
+        '[Hopper] JWT verification requires JWT_SECRET, SUPABASE_JWT_SECRET, or SUPABASE_JWT_PUBLIC_KEY in production'
       );
     }
     if (!process.env.CORS_ALLOWED_ORIGINS) {
@@ -230,6 +231,7 @@ export function createApp(options: CreateAppOptions = {}) {
   // ---------------------------------------------------------------------------
   // Routers
   // ---------------------------------------------------------------------------
+  app.use('/api/auth', createAuthRouter(userProfileRepo, workspaceRepo, orgRepo, repoRepo));
   app.use('/api/webhooks', createWebhooksRouter());
   app.use('/api/billing', createBillingRouter());
   app.use(

@@ -7,6 +7,9 @@ export interface AuthenticatedUser {
   id: string;
   email?: string;
   role?: string;
+  login?: string;
+  github_user_id?: number;
+  avatar_url?: string;
   app_metadata?: Record<string, any>;
   user_metadata?: Record<string, any>;
 }
@@ -75,15 +78,15 @@ export function verifyJwtToken(token: string, options: JwtVerificationOptions = 
 
   if (alg === 'HS256') {
     const isProduction = process.env.NODE_ENV === 'production';
-    const configuredSecret = options.secret || process.env.SUPABASE_JWT_SECRET;
+    const configuredSecret = options.secret || process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET;
 
     if (isProduction && !configuredSecret) {
-      throw ApiError.internal('JWT verification failed: SUPABASE_JWT_SECRET must be explicitly configured in production environments');
+      throw ApiError.internal('JWT verification failed: JWT_SECRET or SUPABASE_JWT_SECRET must be explicitly configured in production environments');
     }
 
     const secret = configuredSecret || DEFAULT_DEV_JWT_SECRET;
     if (!secret) {
-      throw ApiError.internal('JWT verification failed: SUPABASE_JWT_SECRET is not configured');
+      throw ApiError.internal('JWT verification failed: JWT_SECRET is not configured');
     }
 
     const calculatedSig = crypto.createHmac('sha256', secret).update(signingInput).digest();
@@ -184,17 +187,28 @@ export function requireAuth(userProfileRepo?: UserProfileRepository) {
         id: payload.sub,
         email: payload.email,
         role: payload.role || 'authenticated',
+        login: payload.login || payload.user_metadata?.user_name || (payload.email ? payload.email.split('@')[0] : 'user'),
+        github_user_id: payload.github_user_id,
+        avatar_url: payload.avatar_url || payload.user_metadata?.avatar_url,
         app_metadata: payload.app_metadata,
         user_metadata: payload.user_metadata,
       };
 
       // Resolve linked UserProfile ID if available, or auto-upsert
       try {
-        let profile = await profileRepo.findByUserId(payload.sub);
+        let profile = payload.profile_id ? await profileRepo.findById(payload.profile_id) : null;
+        if (!profile) {
+          profile = await profileRepo.findByUserId(payload.sub);
+        }
+        if (!profile && req.user.login) {
+          profile = await profileRepo.findByUsername(req.user.login);
+        }
         if (!profile) {
           profile = await profileRepo.upsert({
             userId: payload.sub,
-            username: payload.email ? `${payload.email.split('@')[0]}_${payload.sub.slice(0, 6)}` : `user-${payload.sub.slice(0, 8)}`,
+            username: req.user.login,
+            fullName: payload.name || req.user.login,
+            avatarUrl: req.user.avatar_url,
           });
         }
         if (profile) {
@@ -227,6 +241,9 @@ export function optionalAuth() {
             id: payload.sub,
             email: payload.email,
             role: payload.role || 'authenticated',
+            login: payload.login || (payload.email ? payload.email.split('@')[0] : 'user'),
+            github_user_id: payload.github_user_id,
+            avatar_url: payload.avatar_url,
           };
         }
       } catch (_err) {

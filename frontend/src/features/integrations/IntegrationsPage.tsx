@@ -1,6 +1,5 @@
 import React from 'react';
 import { useHealthQuery } from '../../api/hooks';
-import { isSupabaseConfigured } from '../../lib/supabase';
 import { useSession } from '../auth/useSession';
 import {
   Badge,
@@ -13,7 +12,7 @@ import {
   StatusDot,
 } from '../../components/ui/primitives';
 import { formatNumber } from '../../lib/format';
-import { CheckCircle2, CircleDashed, Github, Sparkles, CreditCard, Database } from 'lucide-react';
+import { CircleDashed, Github, Sparkles, CreditCard, Database } from 'lucide-react';
 
 type IntegrationState = 'verified' | 'unverified' | 'unavailable';
 
@@ -37,15 +36,14 @@ const IntegrationsPage: React.FC = () => {
     detail: string;
   }> = [
     {
-      name: 'Supabase Auth',
-      purpose: 'Session issuance, refresh and sign-out',
-      icon: CheckCircle2,
-      state: isSupabaseConfigured ? (status === 'authenticated' ? 'verified' : 'unverified') : 'unavailable',
-      detail: isSupabaseConfigured
-        ? status === 'authenticated'
-          ? 'A live Supabase session is active in this browser.'
-          : 'Public Supabase values are present; sign in to complete the flow.'
-        : 'VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are not set.',
+      name: 'GitHub Authentication',
+      purpose: 'OAuth 2.0 Web Application Flow & Personal Access Token verification',
+      icon: Github,
+      state: status === 'authenticated' ? 'verified' : 'unverified',
+      detail:
+        status === 'authenticated'
+          ? 'A live verified GitHub session is active in this browser.'
+          : 'Sign in with GitHub or a Personal Access Token to complete authentication.',
     },
     {
       name: 'Supabase PostgreSQL',

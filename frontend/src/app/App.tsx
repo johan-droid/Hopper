@@ -70,6 +70,7 @@ const Shell: React.FC = () => (
 const router = createBrowserRouter([
   { path: ROUTES.landing, element: withSuspense(<LandingPage />) },
   { path: ROUTES.login, element: withSuspense(<LoginPage />) },
+  { path: '/login/callback', element: withSuspense(<LoginPage />) },
   { path: ROUTES.signup, element: withSuspense(<LoginPage initialMode="signup" />) },
   {
     path: '/app',

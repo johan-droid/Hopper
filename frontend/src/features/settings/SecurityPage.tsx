@@ -50,14 +50,16 @@ const SecurityPage: React.FC = () => {
         <Card>
           <CardHeader
             title="Current session"
-            description="Issued and refreshed by Supabase Auth."
+            description="Authoritative identity verified via GitHub."
             actions={<Badge tone={session ? 'success' : 'neutral'}>{session ? 'Active' : 'None'}</Badge>}
           />
           <dl className="divide-y divide-hairline">
             {[
-              ['Account', user?.email ?? '—'],
+              ['GitHub account', user?.login ? `@${user.login}` : (user?.name ?? '—')],
+              ['Email', user?.email ?? '—'],
               ['User ID', user?.id ?? '—'],
-              ['Token type', session?.token_type ?? '—'],
+              ['Auth provider', 'GitHub (OAuth / Personal Access Token)'],
+              ['Token type', session?.token_type ?? 'Bearer'],
               ['Expires', session?.expires_at ? formatTimestamp(new Date(session.expires_at * 1000).toISOString()) : '—'],
               ['Active workspace', workspace?.name ?? '—'],
             ].map(([label, value]) => (
@@ -71,7 +73,7 @@ const SecurityPage: React.FC = () => {
           </dl>
           <div className="border-t border-hairline px-5 py-3">
             <Button variant="danger" size="sm" onClick={signOutEverywhere} loading={busy}>
-              Sign out of all sessions
+              Sign out of session
             </Button>
             {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
           </div>
@@ -81,12 +83,12 @@ const SecurityPage: React.FC = () => {
           <CardHeader title="Guarantees" description="Implemented in the API and database, not in this UI." />
           <ul className="space-y-2.5 px-5 pb-5">
             {[
-              'Supabase JWTs are verified for signature, issuer, audience, expiry and algorithm.',
-              'Every tenant query is scoped by organisation and repository; PostgreSQL RLS is enforced.',
-              'GitHub and Stripe webhooks verify their own signatures and never use a user session.',
+              'Authoritative GitHub identity is cryptographically verified on every request.',
+              'Every tenant query is scoped by workspace and repository; multi-tenant isolation is strictly enforced.',
+              'GitHub and Stripe webhooks verify cryptographic signatures and never use a user session.',
               'Secrets are redacted from logs before storage and before any model call.',
-              'The service-role key and GitHub App private key are never sent to the browser.',
-              'Signing out clears the query cache so another account cannot read cached pages.',
+              'The backend secret keys and GitHub App private key are never sent to the browser.',
+              'Signing out clears the query cache and purges browser authentication tokens.',
             ].map((item) => (
               <li key={item} className="flex gap-2 text-xs leading-relaxed text-ink-secondary">
                 <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
@@ -98,10 +100,9 @@ const SecurityPage: React.FC = () => {
       </div>
 
       <div className="mt-4">
-        <InlineNotice tone="neutral" title="No client-side token minting">
-          Demo sign-in and the previous browser-side HMAC token signing have been removed. If Supabase is
-          unconfigured, no authentication path exists — the app fails closed rather than issuing a
-          locally-signed token.
+        <InlineNotice tone="neutral" title="Verified GitHub Authentication">
+          Hopper authenticates using GitHub OAuth and Personal Access Tokens, validating numerical user IDs and
+          organization permissions directly against GitHub's authoritative API before issuing scoped JWT sessions.
         </InlineNotice>
       </div>
     </>

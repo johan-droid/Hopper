@@ -20,7 +20,7 @@ import { useToast } from '../../components/ui/feedback';
 import { ROUTES } from '../../lib/routes';
 import { formatDate } from '../../lib/format';
 import type { Repository } from '../../api/schema';
-import { GitBranch, GitFork, Link2, Search } from 'lucide-react';
+import { GitBranch, GitFork, Link2, Search, RefreshCw } from 'lucide-react';
 
 const RepositoriesPage: React.FC = () => {
   const queryClient = useQueryClient();
@@ -52,6 +52,26 @@ const RepositoriesPage: React.FC = () => {
     },
   });
 
+  const syncMutation = useMutation({
+    mutationFn: () => api.syncGitHub({ workspaceId: workspaceId ?? undefined }),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.repositories(workspaceId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workspaces(null) });
+      toast.push({
+        tone: 'success',
+        title: 'GitHub Sync Complete',
+        description: `Synced ${result.stats.organizationsSynced} organizations and ${result.stats.repositoriesSynced} repositories.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast.push({
+        tone: 'danger',
+        title: 'GitHub Sync Failed',
+        description: error.message,
+      });
+    },
+  });
+
   const filtered = repositories.filter((repository) =>
     repository.full_name.toLowerCase().includes(query.trim().toLowerCase())
   );
@@ -76,9 +96,21 @@ const RepositoriesPage: React.FC = () => {
         title="Repositories"
         description="Repositories visible in the active workspace, with connection state and branch defaults."
         actions={
-          <Button size="sm" variant="ghost" onClick={() => void repositoriesQuery.refetch()} loading={repositoriesQuery.isFetching}>
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => syncMutation.mutate()}
+              loading={syncMutation.isPending}
+              className="inline-flex items-center gap-1.5"
+            >
+              <RefreshCw className={`h-3 w-3 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+              Sync with GitHub
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => void repositoriesQuery.refetch()} loading={repositoriesQuery.isFetching}>
+              Refresh
+            </Button>
+          </div>
         }
       />
 
@@ -213,14 +245,25 @@ const RepositoriesPage: React.FC = () => {
               description={
                 query
                   ? 'Try a different owner or repository name.'
-                  : 'Install the GitHub App on a repository and deliver a workflow event. The repository is created on first webhook.'
+                  : 'Sync your repositories from GitHub or connect a GitHub App installation to get started.'
               }
               action={
                 query ? (
                   <Button size="sm" onClick={() => setQuery('')}>
                     Clear filter
                   </Button>
-                ) : undefined
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => syncMutation.mutate()}
+                    loading={syncMutation.isPending}
+                    className="inline-flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+                    Sync with GitHub
+                  </Button>
+                )
               }
             />
           }

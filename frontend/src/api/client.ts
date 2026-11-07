@@ -49,10 +49,15 @@ export class ApiError extends Error {
 }
 
 /**
- * Access tokens come exclusively from the Supabase session. The frontend never
- * mints or signs a token itself.
+ * Access tokens come from the Hopper GitHub session in localStorage,
+ * falling back to Supabase if configured.
  */
 async function getAccessToken(): Promise<string | null> {
+  if (typeof window !== 'undefined') {
+    const localToken = localStorage.getItem('hopper_auth_token');
+    if (localToken) return localToken;
+  }
+
   if (!isSupabaseConfigured) return null;
   try {
     const { data } = await supabase.auth.getSession();
@@ -277,4 +282,97 @@ export const api = {
       })
     );
   },
+
+  getAuthMe: (): Promise<{
+    success: boolean;
+    user: Record<string, any>;
+    profile: UserProfile | null;
+    currentWorkspaceId?: string | null;
+    workspaces: Workspace[];
+  }> =>
+    request(
+      '/api/auth/me',
+      { method: 'GET' },
+      z.object({
+        success: z.boolean(),
+        user: z.record(z.any()),
+        profile: UserProfileSchema.nullable(),
+        currentWorkspaceId: z.string().nullable().optional(),
+        workspaces: z.array(WorkspaceSchema).optional().default([]),
+      })
+    ),
+
+  loginWithGitHubToken: (token: string): Promise<{
+    success: boolean;
+    token: string;
+    user: Record<string, any>;
+    profile: UserProfile;
+    workspaceId: string;
+    sync?: {
+      organizationsSynced: number;
+      repositoriesSynced: number;
+    };
+  }> =>
+    request(
+      '/api/auth/github/token',
+      {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      },
+      z.object({
+        success: z.boolean(),
+        token: z.string(),
+        user: z.record(z.any()),
+        profile: UserProfileSchema,
+        workspaceId: z.string(),
+        sync: z
+          .object({
+            organizationsSynced: z.number(),
+            repositoriesSynced: z.number(),
+          })
+          .optional(),
+      })
+    ),
+
+  syncGitHub: (payload?: {
+    githubToken?: string;
+    workspaceId?: string;
+  }): Promise<{
+    success: boolean;
+    syncedAt: string;
+    user: Record<string, any>;
+    workspaceId: string;
+    stats: {
+      organizationsSynced: number;
+      repositoriesSynced: number;
+    };
+    organizations: any[];
+    repositories: any[];
+  }> =>
+    request(
+      '/api/auth/sync',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload || {}),
+      },
+      z.object({
+        success: z.boolean(),
+        syncedAt: z.string(),
+        user: z.record(z.any()),
+        workspaceId: z.string(),
+        stats: z.object({
+          organizationsSynced: z.number(),
+          repositoriesSynced: z.number(),
+        }),
+        organizations: z.array(z.record(z.any())),
+        repositories: z.array(z.record(z.any())),
+      })
+    ),
+
+  logout: (): Promise<{ success: boolean; message?: string }> =>
+    request(
+      '/api/auth/logout',
+      { method: 'POST' },
+      z.object({ success: z.boolean(), message: z.string().optional() })
+    ),
 };
