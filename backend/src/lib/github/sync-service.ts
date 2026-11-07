@@ -259,3 +259,4 @@ function hashCode(str: string): number {
   }
   return hash;
 }
+
