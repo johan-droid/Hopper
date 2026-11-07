@@ -269,7 +269,7 @@ export function createApp(options: CreateAppOptions = {}) {
     res.json({
       service: 'Hopper CI Failure Diagnosis Engine API Gateway',
       version: '1.0.0',
-      frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+      frontendUrl: process.env.FRONTEND_URL || process.env.VERCEL_URL || 'http://localhost:5173',
       health: '/api/health',
     });
   });

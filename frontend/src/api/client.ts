@@ -27,7 +27,7 @@ import {
   DiagnosisHistoryItemSchema,
 } from './schema';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || process.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const REQUEST_TIMEOUT_MS = 20_000;
 
 export class ApiError extends Error {

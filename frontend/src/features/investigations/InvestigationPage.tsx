@@ -4,7 +4,12 @@ import {
   useAdhocDiagnoseMutation,
   useSignatureQuery,
 } from '../../api/hooks';
-import { AdhocDiagnoseRequestSchema } from '../../api/schema';
+import { AdhocDiagnoseRequestSchema, AdhocDiagnoseResponse } from '../../api/schema';
+import {
+  diagnoseWithPuterAi,
+  PUTER_MODELS,
+  PuterModelId,
+} from '../../lib/puter-ai';
 import {
   Badge,
   Button,
@@ -73,6 +78,13 @@ const InvestigationPage: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [usedSample, setUsedSample] = useState(true);
 
+  // Puter AI interactive execution state
+  const [engine, setEngine] = useState<'puter' | 'backend'>('puter');
+  const [selectedModel, setSelectedModel] = useState<PuterModelId>('deepseek-chat');
+  const [puterResult, setPuterResult] = useState<AdhocDiagnoseResponse | null>(null);
+  const [puterLoading, setPuterLoading] = useState(false);
+  const [puterError, setPuterError] = useState<string | null>(null);
+
   const applySample = (id: string) => {
     const sample = SAMPLE_LOGS.find((item) => item.id === id);
     if (!sample) return;
@@ -83,9 +95,10 @@ const InvestigationPage: React.FC = () => {
     setFormError(null);
   };
 
-  const submit = (event: React.FormEvent) => {
+  const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setFormError(null);
+    setPuterError(null);
     const parsed = AdhocDiagnoseRequestSchema.safeParse({
       rawLog,
       jobName,
@@ -96,8 +109,27 @@ const InvestigationPage: React.FC = () => {
       setFormError(parsed.error.issues[0]?.message ?? 'Check the form values.');
       return;
     }
-    diagnoseMutation.mutate(parsed.data);
+
+    if (engine === 'puter') {
+      setPuterLoading(true);
+      setPuterResult(null);
+      try {
+        const result = await diagnoseWithPuterAi(parsed.data, selectedModel);
+        setPuterResult(result);
+      } catch (err: any) {
+        setPuterError(err.message || 'Puter AI diagnosis failed. You can switch to Backend Rule Engine.');
+      } finally {
+        setPuterLoading(false);
+      }
+    } else {
+      setPuterResult(null);
+      diagnoseMutation.mutate(parsed.data);
+    }
   };
+
+  const activeResult = puterResult || diagnoseMutation.data;
+  const activeError = puterError || (diagnoseMutation.error ? (diagnoseMutation.error as Error).message : null);
+  const isDiagnosing = puterLoading || diagnoseMutation.isPending;
 
   const signature = signatureQuery.data;
 
@@ -271,6 +303,40 @@ const InvestigationPage: React.FC = () => {
               ))}
             </div>
 
+            <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-hairline/60">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium text-ink-muted">Engine:</span>
+                <select
+                  value={engine}
+                  onChange={(e) => {
+                    setEngine(e.target.value as 'puter' | 'backend');
+                    setPuterError(null);
+                  }}
+                  className="rounded border border-hairline bg-inset px-2.5 py-1 text-xs text-ink focus:outline-none focus:border-cyan cursor-pointer"
+                >
+                  <option value="puter">Puter AI (Zero-Key Browser Allowance)</option>
+                  <option value="backend">Backend Diagnostic Pipeline (Deterministic / Outbox)</option>
+                </select>
+              </div>
+
+              {engine === 'puter' ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-medium text-ink-muted">Model:</span>
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value as PuterModelId)}
+                    className="rounded border border-hairline bg-inset px-2.5 py-1 text-xs text-cyan font-mono focus:outline-none focus:border-cyan cursor-pointer"
+                  >
+                    {PUTER_MODELS.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Job name" htmlFor="job-name">
                 <Input
@@ -323,41 +389,48 @@ const InvestigationPage: React.FC = () => {
                   ? 'Example content is loaded — edit or replace it before relying on the result.'
                   : `${rawLog.length.toLocaleString()} characters`}
               </span>
-              <Button type="submit" variant="primary" loading={diagnoseMutation.isPending}>
+              <Button type="submit" variant="primary" loading={isDiagnosing}>
                 <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                {diagnoseMutation.isPending ? 'Diagnosing…' : 'Run diagnosis'}
+                {isDiagnosing
+                  ? 'Diagnosing…'
+                  : engine === 'puter'
+                    ? `Diagnose with Puter (${selectedModel})`
+                    : 'Run backend diagnosis'}
               </Button>
             </div>
           </form>
         </Card>
       </div>
 
-      {diagnoseMutation.isError ? (
+      {activeError ? (
         <div className="mt-4">
           <ErrorState
             title="Diagnosis failed"
-            message={(diagnoseMutation.error as Error).message}
-            onRetry={() => diagnoseMutation.reset()}
+            message={activeError}
+            onRetry={() => {
+              setPuterError(null);
+              diagnoseMutation.reset();
+            }}
           />
         </div>
       ) : null}
 
-      {diagnoseMutation.data ? (
+      {activeResult ? (
         <Card className="mt-4">
           <CardHeader
             title="Diagnosis result"
-            description={`Fingerprint ${diagnoseMutation.data.signatureHash.slice(0, 32)}…`}
+            description={`Fingerprint ${activeResult.signatureHash.slice(0, 32)}…`}
             actions={
               <>
-                <Badge tone={diagnoseMutation.data.isFallback ? 'warning' : 'success'}>
-                  {diagnoseMutation.data.provider ?? (diagnoseMutation.data.isFallback ? 'deterministic' : 'model')}
+                <Badge tone={activeResult.isFallback ? 'warning' : 'success'}>
+                  {activeResult.provider ?? (activeResult.isFallback ? 'deterministic' : 'model')}
                 </Badge>
-                <CopyButton value={diagnoseMutation.data.signatureHash} label="Copy fingerprint" />
+                <CopyButton value={activeResult.signatureHash} label="Copy fingerprint" />
               </>
             }
           />
           <div className="space-y-4 px-5 pb-5">
-            {diagnoseMutation.data.isFallback ? (
+            {activeResult.isFallback ? (
               <InlineNotice tone="warning" title="Deterministic result">
                 No AI provider answered this request, so the diagnosis came from the deterministic
                 rule engine. Treat it as a structural reading of the log, not a model analysis.
@@ -367,19 +440,19 @@ const InvestigationPage: React.FC = () => {
             <div>
               <p className="text-[11px] uppercase tracking-wide text-ink-muted">Root cause clues</p>
               <p className="mt-1 text-sm leading-relaxed text-ink">
-                {diagnoseMutation.data.diagnosis.root_cause_clues}
+                {activeResult.diagnosis.root_cause_clues}
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2 text-[11px]">
-              {diagnoseMutation.data.detectedFramework ? (
-                <Badge tone="neutral" mono>{diagnoseMutation.data.detectedFramework}</Badge>
+              {activeResult.detectedFramework ? (
+                <Badge tone="neutral" mono>{activeResult.detectedFramework}</Badge>
               ) : null}
-              {diagnoseMutation.data.detectedExitCode !== null &&
-              diagnoseMutation.data.detectedExitCode !== undefined ? (
-                <Badge tone="neutral" mono>exit {diagnoseMutation.data.detectedExitCode}</Badge>
+              {activeResult.detectedExitCode !== null &&
+              activeResult.detectedExitCode !== undefined ? (
+                <Badge tone="neutral" mono>exit {activeResult.detectedExitCode}</Badge>
               ) : null}
-              <Badge tone="accent">flakiness {diagnoseMutation.data.flakinessScore}%</Badge>
+              <Badge tone="accent">flakiness {activeResult.flakinessScore}%</Badge>
             </div>
 
             <div>
@@ -387,18 +460,18 @@ const InvestigationPage: React.FC = () => {
                 Relevant log lines
               </p>
               <LogViewer
-                content={diagnoseMutation.data.diagnosis.relevant_log_lines
+                content={activeResult.diagnosis.relevant_log_lines
                   .map((line) => `L${line.line_number}: ${line.content}`)
                   .join('\n')}
                 maxHeight="16rem"
               />
             </div>
 
-            {diagnoseMutation.data.diagnosis.recommended_next_checks.length > 0 ? (
+            {activeResult.diagnosis.recommended_next_checks.length > 0 ? (
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-ink-muted">Recommended next checks</p>
                 <ul className="mt-1.5 space-y-1.5">
-                  {diagnoseMutation.data.diagnosis.recommended_next_checks.map((check) => (
+                  {activeResult.diagnosis.recommended_next_checks.map((check) => (
                     <li key={check} className="flex gap-2 text-xs text-ink-secondary">
                       <ArrowUpRight className="mt-0.5 h-3 w-3 shrink-0 text-accent" aria-hidden />
                       <span>{check}</span>
@@ -408,14 +481,14 @@ const InvestigationPage: React.FC = () => {
               </div>
             ) : null}
 
-            {diagnoseMutation.data.diagnosis.local_repro_command ? (
+            {activeResult.diagnosis.local_repro_command ? (
               <div>
                 <div className="flex items-center justify-between">
                   <p className="text-[11px] uppercase tracking-wide text-ink-muted">Reproduction command</p>
-                  <CopyButton value={diagnoseMutation.data.diagnosis.local_repro_command} />
+                  <CopyButton value={activeResult.diagnosis.local_repro_command} />
                 </div>
                 <pre className="mt-1 overflow-auto rounded border border-hairline bg-inset p-2.5 font-mono text-xs text-success">
-                  {diagnoseMutation.data.diagnosis.local_repro_command}
+                  {activeResult.diagnosis.local_repro_command}
                 </pre>
               </div>
             ) : (

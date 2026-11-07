@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import crypto from 'node:crypto';
 import { verifyJwtToken, DEFAULT_DEV_JWT_SECRET } from '../src/server/middleware/auth.js';
+import {
+  generateSignedOAuthState,
+  verifySignedOAuthState,
+  createSessionToken,
+} from '../src/lib/github/user-auth.js';
+import { getInstallationToken } from '../src/lib/github/app-auth.js';
 
 describe('Phase 12: Independent Authentication Verification (10-Point Suite)', () => {
   const secret = 'super-secret-jwt-token-with-at-least-32-chars-length';
@@ -181,6 +187,79 @@ describe('Phase 12: Independent Authentication Verification (10-Point Suite)', (
     } finally {
       process.env.NODE_ENV = prevNodeEnv;
       if (prevSupabaseSecret) process.env.SUPABASE_JWT_SECRET = prevSupabaseSecret;
+    }
+  });
+
+  // 12. Stateless Signed OAuth State Verification
+  it('12. Validates signed, tamper-proof, timestamped serverless OAuth state parameter', () => {
+    const testSecret = 'serverless-oauth-state-signing-secret-key-32';
+    const state = generateSignedOAuthState(testSecret);
+
+    expect(state).toContain('.');
+    expect(state.split('.').length).toBe(3);
+
+    // Valid state verification
+    expect(verifySignedOAuthState(state, 600, testSecret)).toBe(true);
+
+    // Tampered state verification
+    const [nonce, ts, sig] = state.split('.');
+    const tampered = `${nonce}.${ts}.badsignature1234567890abcdef`;
+    expect(verifySignedOAuthState(tampered, 600, testSecret)).toBe(false);
+
+    // Expired state verification
+    const expiredTs = Math.floor(Date.now() / 1000) - 700; // 700s ago (> 600s maxAge)
+    const expiredHmac = crypto.createHmac('sha256', testSecret).update(`${nonce}.${expiredTs}`).digest('hex');
+    const expiredState = `${nonce}.${expiredTs}.${expiredHmac}`;
+    expect(verifySignedOAuthState(expiredState, 600, testSecret)).toBe(false);
+  });
+
+  // 13. App installation token fail-closed behavior in production
+  it('13. Strictly throws in production if GITHUB_APP_PRIVATE_KEY is missing or mock is attempted', async () => {
+    const prevNodeEnv = process.env.NODE_ENV;
+    const prevKey = process.env.GITHUB_APP_PRIVATE_KEY;
+    try {
+      process.env.NODE_ENV = 'production';
+      delete process.env.GITHUB_APP_PRIVATE_KEY;
+
+      await expect(getInstallationToken(12345, { mockToken: 'fake' })).rejects.toThrow(
+        /Mock installation tokens are strictly prohibited in production/
+      );
+
+      await expect(getInstallationToken(12345)).rejects.toThrow(
+        /GITHUB_APP_PRIVATE_KEY is required in production/
+      );
+    } finally {
+      process.env.NODE_ENV = prevNodeEnv;
+      if (prevKey) process.env.GITHUB_APP_PRIVATE_KEY = prevKey;
+    }
+  });
+
+  // 14. Session token minting fails closed in production without secret
+  it('14. createSessionToken strictly fails closed in production when JWT_SECRET is unset', () => {
+    const prevNodeEnv = process.env.NODE_ENV;
+    const prevSecret = process.env.JWT_SECRET;
+    const prevSbSecret = process.env.SUPABASE_JWT_SECRET;
+    try {
+      process.env.NODE_ENV = 'production';
+      delete process.env.JWT_SECRET;
+      delete process.env.SUPABASE_JWT_SECRET;
+
+      const dummyUser = {
+        id: 12345,
+        login: 'octocat',
+        name: 'Mona Lisa Octocat',
+        email: 'octo@github.com',
+        avatarUrl: 'https://github.com/octocat.png',
+        htmlUrl: 'https://github.com/octocat',
+      };
+
+      expect(() =>
+        createSessionToken(dummyUser, 'u1', 'p1', 'ws1')
+      ).toThrow(/JWT_SECRET or SUPABASE_JWT_SECRET must be explicitly configured in production/);
+    } finally {
+      process.env.NODE_ENV = prevNodeEnv;
+      if (prevSecret) process.env.JWT_SECRET = prevSecret;
+      if (prevSbSecret) process.env.SUPABASE_JWT_SECRET = prevSbSecret;
     }
   });
 });

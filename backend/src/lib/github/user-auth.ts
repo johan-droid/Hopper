@@ -217,6 +217,53 @@ export async function verifyGitHubToken(token: string): Promise<GitHubUserProfil
 }
 
 /**
+ * Generates a stateless, tamper-proof, timestamped OAuth state parameter.
+ * Format: `${nonce}.${timestamp}.${hmac}`
+ * Valid across all serverless function instances without shared memory.
+ */
+export function generateSignedOAuthState(secretOverride?: string): string {
+  const secret = secretOverride || process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || DEFAULT_DEV_JWT_SECRET;
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const timestamp = Math.floor(Date.now() / 1000);
+  const data = `${nonce}.${timestamp}`;
+  const hmac = crypto.createHmac('sha256', secret).update(data).digest('hex');
+  return `${data}.${hmac}`;
+}
+
+/**
+ * Verifies a stateless signed OAuth state parameter.
+ * Enforces maximum age (10 minutes) and HMAC integrity via timingSafeEqual.
+ */
+export function verifySignedOAuthState(state: string, maxAgeSeconds = 600, secretOverride?: string): boolean {
+  if (!state || typeof state !== 'string') return false;
+  const parts = state.split('.');
+  if (parts.length !== 3) return false;
+
+  const [nonce, timestampStr, signature] = parts;
+  const timestamp = parseInt(timestampStr, 10);
+  if (isNaN(timestamp)) return false;
+
+  const now = Math.floor(Date.now() / 1000);
+  // Replay & expiry check (10 min max age, 30s clock drift into future)
+  if (now - timestamp > maxAgeSeconds || timestamp > now + 30) {
+    return false;
+  }
+
+  const secret = secretOverride || process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || DEFAULT_DEV_JWT_SECRET;
+  const data = `${nonce}.${timestamp}`;
+  const expectedHmac = crypto.createHmac('sha256', secret).update(data).digest('hex');
+
+  const expectedBuffer = Buffer.from(expectedHmac, 'utf8');
+  const signatureBuffer = Buffer.from(signature, 'utf8');
+
+  if (expectedBuffer.length !== signatureBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
+}
+
+/**
  * Mints an authoritative Hopper session JWT encoding the user's verified GitHub identity.
  */
 export function createSessionToken(
@@ -226,7 +273,12 @@ export function createSessionToken(
   workspaceId: string,
   options: { expiresInSeconds?: number; githubToken?: string } = {}
 ): string {
-  const secret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || DEFAULT_DEV_JWT_SECRET;
+  const isProduction = process.env.NODE_ENV === 'production';
+  const configuredSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET;
+  if (isProduction && !configuredSecret) {
+    throw new Error('JWT_SECRET or SUPABASE_JWT_SECRET must be explicitly configured in production environments');
+  }
+  const secret = configuredSecret || DEFAULT_DEV_JWT_SECRET;
   const now = Math.floor(Date.now() / 1000);
   const expiresIn = options.expiresInSeconds ?? 7 * 24 * 60 * 60; // 7 days default
 

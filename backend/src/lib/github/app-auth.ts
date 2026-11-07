@@ -101,9 +101,14 @@ export async function getInstallationToken(
   installationId: number,
   options: { forceRefresh?: boolean; mockToken?: string } = {}
 ): Promise<string> {
+  const isProduction = process.env.NODE_ENV === 'production';
   const now = Date.now();
   const explicitMock = options.mockToken || mockInstallationToken;
+
   if (explicitMock) {
+    if (isProduction) {
+      throw new Error('FATAL: Mock installation tokens are strictly prohibited in production');
+    }
     installationTokenCache.set(installationId, {
       token: explicitMock,
       expiresAt: now + 50 * 60 * 1000,
@@ -118,8 +123,11 @@ export async function getInstallationToken(
     return cached.token;
   }
 
-  // If in mock AI provider mode without real keys, return deterministic synthetic token
+  // If in mock AI provider mode without real keys in development, return deterministic synthetic token
   if (process.env.AI_PROVIDER === 'mock' || !process.env.GITHUB_APP_PRIVATE_KEY) {
+    if (isProduction) {
+      throw new Error('FATAL: GITHUB_APP_PRIVATE_KEY is required in production to mint GitHub App installation tokens');
+    }
     const syntheticToken = `ghs_mock_installation_token_${installationId}_${now}`;
     installationTokenCache.set(installationId, {
       token: syntheticToken,
@@ -158,6 +166,9 @@ export async function getInstallationToken(
 
     return data.token;
   } catch (err: any) {
+    if (isProduction) {
+      throw err;
+    }
     // If request fails in development, fallback to synthetic token
     const fallbackToken = `ghs_fallback_token_${installationId}`;
     installationTokenCache.set(installationId, {

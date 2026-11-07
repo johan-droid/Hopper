@@ -13,6 +13,8 @@ import {
   verifyGitHubToken,
   createSessionToken,
   githubIdToUuid,
+  generateSignedOAuthState,
+  verifySignedOAuthState,
   GitHubUserProfile,
 } from '../../lib/github/user-auth.js';
 import { GitHubSyncService } from '../../lib/github/sync-service.js';
@@ -41,7 +43,7 @@ export function createAuthRouter(
    * Initiates GitHub OAuth flow.
    */
   router.get('/github', (req: Request, res: Response) => {
-    const state = crypto.randomBytes(16).toString('hex');
+    const state = generateSignedOAuthState();
     oauthStateCache.add(state);
     setTimeout(() => oauthStateCache.delete(state), 10 * 60 * 1000);
 
@@ -68,11 +70,12 @@ export function createAuthRouter(
         throw ApiError.badRequest('Missing GitHub authorization code');
       }
 
-      // Verify state in production or when state cache has active entries
-      if (process.env.NODE_ENV === 'production' && state && oauthStateCache.size > 0 && !oauthStateCache.has(state)) {
-        throw ApiError.unauthorized('Invalid or expired OAuth state parameter');
+      // Verify state: accepts cryptographically signed serverless state or cached state
+      const isStateValid = state && (verifySignedOAuthState(state) || oauthStateCache.has(state));
+      if (process.env.NODE_ENV === 'production' && (!state || !isStateValid)) {
+        throw ApiError.unauthorized('Invalid, expired, or tampered OAuth state parameter');
       }
-      if (state) {
+      if (state && oauthStateCache.has(state)) {
         oauthStateCache.delete(state);
       }
 
