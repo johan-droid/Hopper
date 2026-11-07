@@ -281,21 +281,10 @@ export function useSession() {
 
 /**
  * Initiates authoritative GitHub OAuth flow.
- * Uses Supabase OAuth when configured, with fallback to backend OAuth endpoint.
+ * Uses Hopper's native backend GitHub OAuth gateway to preserve full GitHub App capabilities.
  */
 export async function initiateGitHubOAuth(): Promise<void> {
-  if (isSupabaseConfigured) {
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
-    const redirectTo = `${origin}/login/callback`;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'github',
-      options: {
-        redirectTo,
-        scopes: 'read:user user:email',
-      },
-    });
-    if (error) throw error;
-  } else if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined') {
     window.location.href = '/api/auth/github';
   }
 }

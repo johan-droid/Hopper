@@ -5,7 +5,6 @@ import {
   sanitizeRedirectPath,
   useSession,
 } from './useSession';
-import { isSupabaseConfigured } from '../../lib/supabase';
 import { ROUTES } from '../../lib/routes';
 import {
   Button,
@@ -211,13 +210,13 @@ const LoginPage: React.FC = () => {
                 </div>
               ) : null}
 
-              {/* Development Environment Diagnostic notice if unconfigured */}
-              {isDevelopment && !isSupabaseConfigured ? (
-                <div className="mt-5 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-300">
+              {/* Development Environment Diagnostic notice */}
+              {isDevelopment ? (
+                <div className="mt-5 rounded-lg border border-accent/20 bg-accent/10 p-3 text-xs text-accent">
                   <div className="flex items-start gap-2">
-                    <Info className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+                    <Info className="h-4 w-4 shrink-0 text-accent mt-0.5" />
                     <div>
-                      <span className="font-semibold text-amber-200">Local Dev Mode:</span> Direct GitHub backend gateway enabled. OAuth will route via <code className="rounded bg-black/40 px-1 py-0.5 font-mono text-[11px]">/api/auth/github</code>.
+                      <span className="font-semibold text-ink">Authoritative Gateway:</span> Direct GitHub App OAuth enabled via <code className="rounded bg-black/40 px-1 py-0.5 font-mono text-[11px]">/api/auth/github</code>.
                     </div>
                   </div>
                 </div>

@@ -88,7 +88,7 @@ describe('Auth Security & Session Management', () => {
   });
 
   describe('initiateGitHubOAuth', () => {
-    it('routes to /api/auth/github when Supabase is not configured', async () => {
+    it('routes to /api/auth/github for authoritative GitHub authentication', async () => {
       const originalWindow = (globalThis as any).window;
       (globalThis as any).window = {
         location: { href: '', origin: 'http://localhost:5173' },
