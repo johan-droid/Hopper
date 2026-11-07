@@ -29,13 +29,27 @@ export function getDatabaseConnectionString(): string {
 }
 
 export function createPool(): pg.Pool {
-  const connectionString = getDatabaseConnectionString();
+  let connectionString = getDatabaseConnectionString();
   const isSsl =
     connectionString.includes('sslmode=require') ||
     connectionString.includes('supabase.co') ||
     connectionString.includes('supabase.com') ||
     connectionString.includes('neon.tech') ||
     process.env.PGSSLMODE === 'require';
+
+  // Strip sslmode from connectionString query parameter so pg-connection-string
+  // does not override ssl: { rejectUnauthorized: false } with strict CA validation.
+  if (isSsl) {
+    try {
+      const parsed = new URL(connectionString);
+      if (parsed.searchParams.has('sslmode')) {
+        parsed.searchParams.delete('sslmode');
+        connectionString = parsed.toString();
+      }
+    } catch {
+      connectionString = connectionString.replace(/[?&]sslmode=[^&]+/g, '');
+    }
+  }
 
   return new Pool({
     connectionString,
