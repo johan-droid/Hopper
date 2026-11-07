@@ -8,7 +8,7 @@ import { useWorkspace } from '../../features/workspace/WorkspaceProvider';
 import { Badge, Button, IconButton, Kbd, StatusDot } from '../ui/primitives';
 import { Tooltip, useToast } from '../ui/feedback';
 import { ROUTES } from '../../lib/routes';
-import { Command, LogOut, Menu, Moon, Search, Sun, User, RefreshCw, Github } from 'lucide-react';
+import { Command, LogOut, Menu, Moon, Search, Sun, User, RefreshCw, Github, Sparkles } from 'lucide-react';
 
 export const Topbar: React.FC<{ onOpenMobileNav: () => void }> = ({ onOpenMobileNav }) => {
   const navigate = useNavigate();
@@ -87,6 +87,18 @@ export const Topbar: React.FC<{ onOpenMobileNav: () => void }> = ({ onOpenMobile
           <Kbd>K</Kbd>
         </span>
       </button>
+
+      <Tooltip label="Launch Zero-Backend Puter.js Edition (DeepSeek, GPT-4o, Qwen, Gemini)">
+        <a
+          href="/puter/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hidden md:inline-flex items-center gap-1.5 rounded-md border border-cyan/40 bg-cyan/10 px-2 py-1 text-[11px] font-medium text-cyan hover:bg-cyan/20 transition-colors"
+        >
+          <Sparkles className="h-3.5 w-3.5 text-cyan" aria-hidden />
+          <span>Puter AI Serverless</span>
+        </a>
+      </Tooltip>
 
       <Tooltip label={statusLabel}>
         <div className="flex items-center gap-1.5 rounded-md border border-hairline px-2 py-1 text-[11px] text-ink-secondary">

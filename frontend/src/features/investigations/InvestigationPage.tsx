@@ -238,10 +238,21 @@ const InvestigationPage: React.FC = () => {
             title="Ad-hoc diagnosis"
             description="Runs the real parser, scrubber, fingerprinter and diagnosis pipeline. Nothing is attached to a repository."
             actions={
-              <Badge tone="neutral">
-                <FlaskConical className="h-3 w-3" aria-hidden />
-                Sandbox
-              </Badge>
+              <div className="flex items-center gap-2">
+                <a
+                  href="/puter/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-cyan hover:underline"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  <span>Launch Puter AI</span>
+                </a>
+                <Badge tone="neutral">
+                  <FlaskConical className="h-3 w-3" aria-hidden />
+                  Sandbox
+                </Badge>
+              </div>
             }
           />
           <form onSubmit={submit} className="space-y-4 px-5 pb-5">

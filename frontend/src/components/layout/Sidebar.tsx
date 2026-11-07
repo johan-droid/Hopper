@@ -164,8 +164,16 @@ export const Sidebar: React.FC<{ mobileOpen: boolean; onCloseMobile: () => void 
           ))}
         </nav>
 
-        <div className={cn('border-t border-hairline px-3 py-2 text-[10px] text-ink-muted', collapsed && 'md:sr-only')}>
-          CI/CD intelligence
+        <div className={cn('border-t border-hairline px-3 py-2 text-[10px] text-ink-muted flex items-center justify-between', collapsed && 'md:sr-only')}>
+          <span>CI/CD intelligence</span>
+          <a
+            href="https://developer.puter.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-cyan hover:underline transition-colors"
+          >
+            Powered by Puter
+          </a>
         </div>
       </aside>
     </>

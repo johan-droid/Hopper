@@ -46,7 +46,7 @@ export const ConfidenceAssessmentSchema = z.object({
 });
 
 export const DiagnosisTelemetrySchema = z.object({
-  provider: z.enum(['anthropic', 'openai', 'deterministic']),
+  provider: z.enum(['puter', 'anthropic', 'openai', 'deterministic']),
   model: z.string(),
   latencyMs: z.number(),
   promptTokens: z.number(),
@@ -532,6 +532,109 @@ export async function callOpenAiLlm(
     promptTokens,
     completionTokens,
     costUsd,
+    isFallback: false,
+  };
+
+  return output;
+}
+
+/**
+ * Calls Puter AI with advanced reasoning and coding models (e.g. DeepSeek, GPT-4o, Qwen, Gemini).
+ * Does not require proprietary Claude or Codex keys.
+ */
+export async function callPuterLlm(
+  params: DiagnosisContext,
+  authToken?: string,
+  timeoutMs = 20000,
+  retryConfig?: RetryPolicyConfig
+): Promise<DiagnosisOutput> {
+  const model = process.env.AI_MODEL || 'deepseek-chat';
+  const start = performance.now();
+  const token = authToken || process.env.PUTER_AUTH_TOKEN || '';
+
+  if (!token) {
+    throw new Error('Puter authentication token (PUTER_AUTH_TOKEN) is not configured');
+  }
+
+  const maxRetries = retryConfig?.maxRetries ?? 2;
+  const initialDelayMs = retryConfig?.initialDelayMs ?? (process.env.NODE_ENV === 'test' ? 25 : 500);
+  const overallStartTime = Date.now();
+  const overallDeadlineMs = retryConfig?.overallDeadlineMs ?? timeoutMs;
+
+  let lastError: Error | null = null;
+  let rawText = '';
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const timeSpent = Date.now() - overallStartTime;
+    const remaining = overallDeadlineMs - timeSpent;
+    if (remaining <= 50) {
+      throw new Error(`Puter AI deadline of ${overallDeadlineMs}ms exceeded before attempt ${attempt + 1}`);
+    }
+
+    try {
+      const response = await fetch('https://api.puter.com/drivers/call/puter-chat-completion', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          interface: 'puter-chat-completion',
+          driver: model,
+          test_mode: false,
+          method: 'complete',
+          args: {
+            messages: [
+              { role: 'system', content: buildDiagnosisSystemPrompt() },
+              { role: 'user', content: buildDiagnosisUserPrompt(params) },
+            ],
+            model,
+            temperature: 0.1,
+          },
+        }),
+        signal: AbortSignal.timeout(Math.min(remaining, 15000)),
+      });
+
+      if (!response.ok) {
+        if (isPermanentHttpError(response.status)) {
+          const errText = await response.text();
+          throw new Error(`Puter AI permanent error (${response.status}): ${errText}`);
+        }
+        throw new Error(`Puter AI transient error HTTP ${response.status}`);
+      }
+
+      const data = (await response.json()) as any;
+      rawText =
+        data?.result?.message?.content ||
+        data?.text ||
+        data?.result?.text ||
+        (typeof data === 'string' ? data : JSON.stringify(data));
+      break;
+    } catch (err: any) {
+      lastError = err;
+      if (attempt >= maxRetries) break;
+      const networkDelay = Math.min(initialDelayMs * Math.pow(2, attempt), 2000);
+      await new Promise((r) => setTimeout(r, networkDelay));
+    }
+  }
+
+  if (!rawText) {
+    throw lastError || new Error('Puter AI returned an empty response');
+  }
+
+  const parsedJson = extractAndParseJson(rawText);
+  const latencyMs = Math.round((performance.now() - start) * 10) / 10;
+  const promptTokens = Math.round((params.slicedLogSnippet.length + 800) / 4);
+  const completionTokens = Math.round(rawText.length / 4);
+
+  const output = DiagnosisOutputSchema.parse(parsedJson);
+  output.telemetry = {
+    provider: 'puter',
+    model,
+    latencyMs,
+    promptTokens,
+    completionTokens,
+    costUsd: 0,
     isFallback: false,
   };
 
@@ -1044,9 +1147,28 @@ export async function synthesizeDiagnosis(
     }
   }
 
+  // Single Provider: Puter.js (Zero-key serverless AI across DeepSeek, GPT-4o, Qwen, Gemini)
+  if (configuredProvider === 'puter') {
+    const puterToken = process.env.PUTER_AUTH_TOKEN;
+    if (puterToken && !puterToken.includes('mock')) {
+      try {
+        const result = await callPuterLlm(params, puterToken, options?.timeoutMs, options?.retryConfig);
+        return result;
+      } catch (err: any) {
+        console.warn(`[AI] Puter.js provider failed: ${err.message}. Falling back to deterministic analysis.`);
+        return synthesizeDeterministicDiagnosis(params, `Puter.js provider error: ${err.message}`);
+      }
+    } else {
+      return synthesizeDeterministicDiagnosis(
+        params,
+        'Puter.js provider selected but PUTER_AUTH_TOKEN is not configured or in mock mode.'
+      );
+    }
+  }
+
   return synthesizeDeterministicDiagnosis(
     params,
-    `Unsupported AI provider: "${configuredProvider}". Expected "anthropic", "openai", or "mock".`
+    `Unsupported AI provider: "${configuredProvider}". Expected "puter", "anthropic", "openai", or "mock".`
   );
 }
 

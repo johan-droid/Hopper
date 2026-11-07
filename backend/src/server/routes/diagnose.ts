@@ -113,6 +113,8 @@ export function createDiagnoseRouter(
       detectedFramework: sliced.detectedFramework,
       detectedExitCode: sliced.detectedExitCode,
       flakinessScore,
+      provider: diagnosis.telemetry?.provider,
+      isFallback: diagnosis.telemetry?.isFallback ?? false,
       diagnosis: {
         ...diagnosis,
         root_cause_clues: diagnosis.root_cause_clues,

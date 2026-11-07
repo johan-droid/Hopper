@@ -10,9 +10,9 @@ Traditional autonomous engineering & CI/CD platforms require running a PostgreSQ
 
 **Hopper Puter.js Edition** runs directly in the browser as a true serverless web application:
 
-1. **Zero-API-Key AI (500+ Models)**:
-   - Uses `puter.ai.chat(prompt, { model, stream: true })` with streaming token output.
-   - Switch between **Claude 3.5 Sonnet**, **GPT-4o**, **GPT-4o Mini**, **Gemini 1.5 Flash**, and **Claude 3.5 Haiku** with no backend proxy.
+1. **Zero-API-Key AI (Top Reasoning & Coding Models via Puter.js)**:
+   - Uses `puter.ai.chat(prompt, { model, stream: true })` with real-time streaming token output.
+   - Switch between **DeepSeek V3**, **DeepSeek Coder**, **Qwen 2.5 Coder 32B**, **GPT-4o**, **GPT-4o Mini**, **Gemini 1.5 Pro & Flash**, **Mistral Large**, and **Llama 3.3 70B** without requiring proprietary Claude or Codex API keys.
 2. **CORS-Free Ingress via `puter.net.fetch()`**:
    - Fetches live GitHub Actions workflow runs and raw logs directly from `api.github.com` without needing a CORS reverse-proxy server.
 3. **Cloud Key-Value Incident Store via `puter.kv`**:
