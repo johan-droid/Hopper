@@ -36,13 +36,46 @@ const LoginPage: React.FC = () => {
   const rawFrom = (location.state as { from?: string } | null)?.from;
   const from = sanitizeRedirectPath(rawFrom);
 
-  // Catch token in query params if landed on /login?token=... or /login/callback?token=...
+  // Catch token or GitHub OAuth authorization code in query params
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const token = params.get('token');
+    const code = params.get('code');
+    const state = params.get('state');
+
     if (token) {
       localStorage.setItem('hopper_auth_token', token);
       navigate(from, { replace: true });
+      return;
+    }
+
+    if (code) {
+      setBusy(true);
+      setError(null);
+      const callbackUrl = `/api/auth/github/callback?code=${encodeURIComponent(code)}${state ? `&state=${encodeURIComponent(state)}` : ''}`;
+
+      fetch(callbackUrl, {
+        headers: { Accept: 'application/json' },
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || errData.message || `GitHub authentication failed (HTTP ${res.status})`);
+          }
+          return res.json();
+        })
+        .then((data) => {
+          if (data.token) {
+            localStorage.setItem('hopper_auth_token', data.token);
+            navigate(from, { replace: true });
+          } else {
+            throw new Error('No authentication token returned from GitHub authorization.');
+          }
+        })
+        .catch((err) => {
+          setBusy(false);
+          setError(err.message || 'Failed to exchange GitHub authorization code.');
+        });
     }
   }, [location.search, navigate, from]);
 

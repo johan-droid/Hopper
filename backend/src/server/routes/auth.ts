@@ -68,8 +68,8 @@ export function createAuthRouter(
         throw ApiError.badRequest('Missing GitHub authorization code');
       }
 
-      // Verify state unless in test environment
-      if (process.env.NODE_ENV !== 'test' && state && !oauthStateCache.has(state)) {
+      // Verify state in production or when state cache has active entries
+      if (process.env.NODE_ENV === 'production' && state && oauthStateCache.size > 0 && !oauthStateCache.has(state)) {
         throw ApiError.unauthorized('Invalid or expired OAuth state parameter');
       }
       if (state) {

@@ -143,6 +143,9 @@ export function useSessionBootstrap(): void {
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
         const callbackToken = urlParams.get('token');
+        const callbackCode = urlParams.get('code');
+        const callbackState = urlParams.get('state');
+
         if (callbackToken) {
           localStorage.setItem('hopper_auth_token', callbackToken);
           // Clean the query parameter without reload
@@ -150,6 +153,24 @@ export function useSessionBootstrap(): void {
           urlParams.delete('login');
           const cleanSearch = urlParams.toString() ? `?${urlParams.toString()}` : '';
           window.history.replaceState({}, '', `${window.location.pathname}${cleanSearch}`);
+        } else if (callbackCode) {
+          try {
+            const callbackUrl = `/api/auth/github/callback?code=${encodeURIComponent(callbackCode)}${callbackState ? `&state=${encodeURIComponent(callbackState)}` : ''}`;
+            const res = await fetch(callbackUrl, { headers: { Accept: 'application/json' } });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.token) {
+                localStorage.setItem('hopper_auth_token', data.token);
+                urlParams.delete('code');
+                urlParams.delete('state');
+                urlParams.delete('iss');
+                const cleanSearch = urlParams.toString() ? `?${urlParams.toString()}` : '';
+                window.history.replaceState({}, '', `${window.location.pathname}${cleanSearch}`);
+              }
+            }
+          } catch {
+            // Let fallback or login page handle error
+          }
         }
       }
 
