@@ -271,8 +271,6 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.use('/api/user', createUserRouter(userProfileRepo, workspaceRepo));
 
-  app.use(express.static('public'));
-
   // OAuth fallback: handle /auth redirects and forward to the authoritative callback
   app.get('/auth', (req: Request, res: Response) => {
     const queryString = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
