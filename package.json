@@ -36,7 +36,10 @@
     "test:frontend": "npm --prefix frontend run test",
     "vercel:build": "npx vercel build",
     "vercel:dev": "npx vercel dev",
-    "author": "Hopper Engineering",
+  "overrides": {
+    "@vercel/cli-config": "^0.3.8"
+  },
+  "author": "Hopper Engineering",
     "license": "Apache-2.0"
   }
 }

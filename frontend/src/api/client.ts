@@ -295,7 +295,7 @@ export const api = {
       { method: 'GET' },
       z.object({
         success: z.boolean(),
-        user: z.record(z.any()),
+        user: z.record(z.string(), z.any()),
         profile: UserProfileSchema.nullable(),
         currentWorkspaceId: z.string().nullable().optional(),
         workspaces: z.array(WorkspaceSchema).optional().default([]),
@@ -322,7 +322,7 @@ export const api = {
       z.object({
         success: z.boolean(),
         token: z.string(),
-        user: z.record(z.any()),
+        user: z.record(z.string(), z.any()),
         profile: UserProfileSchema,
         workspaceId: z.string(),
         sync: z
@@ -354,7 +354,7 @@ export const api = {
       z.object({
         success: z.boolean(),
         token: z.string(),
-        user: z.record(z.any()),
+        user: z.record(z.string(), z.any()),
         profile: UserProfileSchema,
         workspaceId: z.string(),
         sync: z
@@ -390,14 +390,14 @@ export const api = {
       z.object({
         success: z.boolean(),
         syncedAt: z.string(),
-        user: z.record(z.any()),
+        user: z.record(z.string(), z.any()),
         workspaceId: z.string(),
         stats: z.object({
           organizationsSynced: z.number(),
           repositoriesSynced: z.number(),
         }),
-        organizations: z.array(z.record(z.any())),
-        repositories: z.array(z.record(z.any())),
+        organizations: z.array(z.record(z.string(), z.any())),
+        repositories: z.array(z.record(z.string(), z.any())),
       })
     ),
 

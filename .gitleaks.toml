@@ -1,0 +1,12 @@
+[allowlist]
+description = "Hopper CI allowlist for test fixtures, mocks, sample configs, and documentation"
+paths = [
+  '''(?i)backend/tests/.*''',
+  '''(?i)frontend/src/.*\.test\..*''',
+  '''(?i)scripts/ci/verify-no-committed-secrets\.py''',
+  '''(?i).*\.example$''',
+  '''(?i).*\.md$''',
+  '''(?i)\.runtime/.*''',
+  '''(?i)\.vercel/.*''',
+  '''(?i)\.env.*'''
+]

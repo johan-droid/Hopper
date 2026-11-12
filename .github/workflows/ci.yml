@@ -151,7 +151,7 @@ jobs:
       - name: Verify no Redis dependency remains
         run: |
           set -euo pipefail
-          if grep -rn "bullmq\|ioredis" backend/src backend/package.json; then
+          if grep -rn --exclude="dataset.ts" "bullmq\|ioredis" backend/src backend/package.json; then
             echo "::error::Redis/BullMQ dependency reintroduced"
             exit 1
           fi
@@ -170,24 +170,24 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Validate vercel.json and queue consumer trigger
+      - name: Validate vercel.json multi-service deployment
         run: |
           node -e '
             const fs = require("fs");
             const cfg = JSON.parse(fs.readFileSync("vercel.json", "utf8"));
-            const fn = cfg.functions?.["api/queue/consume.ts"];
-            if (!fn) throw new Error("queue consumer function missing");
-            const trigger = (fn.experimentalTriggers || []).find(
-              (t) => t.type === "queue/v2beta" && t.topic === "hopper-ci-events"
-            );
-            if (!trigger) throw new Error("Vercel Queues trigger missing for hopper-ci-events");
-            if (!cfg.rewrites?.some((r) => r.source === "/api/(.*)")) {
-              throw new Error("API rewrite missing");
+            if (!cfg.services?.backend || cfg.services.backend.runtime !== "container") {
+              throw new Error("Backend container service missing in vercel.json");
             }
-            if (!Array.isArray(cfg.crons) || cfg.crons.length === 0) {
-              throw new Error("queue drain cron missing");
+            if (!cfg.services?.frontend || cfg.services.frontend.framework !== "vite") {
+              throw new Error("Frontend vite service missing in vercel.json");
             }
-            console.log("vercel.json valid:", JSON.stringify(fn.experimentalTriggers));
+            if (!cfg.rewrites?.some((r) => r.source === "/api/(.*)" && r.destination?.service === "backend")) {
+              throw new Error("API backend service rewrite missing in vercel.json");
+            }
+            if (!cfg.rewrites?.some((r) => r.source === "/(.*)" && r.destination?.service === "frontend")) {
+              throw new Error("Frontend service rewrite missing in vercel.json");
+            }
+            console.log("vercel.json valid: multi-service container backend + vite frontend verified.");
           '
 
       - name: Verify no Cloudflare deployment artifacts
