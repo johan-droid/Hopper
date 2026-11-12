@@ -4,8 +4,7 @@
 **Author:** Principal Product Strategist & SaaS Financial Analyst  
 **Date:** November 6, 2026  
 **Operational Ceiling:** Fixed $500.00 USD / calendar month (Immutable application-side cap)  
-**Target Repository:** [`/home/ashutoshsahoo/Downloads/Hopper`](file:///home/ashutoshsahoo/Downloads/Hopper)  
-**Companion Architecture:** [`docs/engineering/PHASE_16R_BUDGET_CONTROLLER_DESIGN.md`](file:///home/ashutoshsahoo/Downloads/Hopper/docs/engineering/PHASE_16R_BUDGET_CONTROLLER_DESIGN.md)
+**Target Repository:** [`/home/ashutoshsahoo/Downloads/Hopper`](file:///home/ashutoshsahoo/Downloads/Hopper)
 
 ---
 
@@ -80,7 +79,7 @@ Green Highlight / [SAFE]: Consumes < 85% of total operational capacity.
 
 ## 3. Global Budget Exhaustion Behavior
 
-When aggregate API expenditure reaches the **$500 monthly limit**, the architectural mechanisms designed in Phase 16R.2 ([`PHASE_16R_BUDGET_CONTROLLER_DESIGN.md`](file:///home/ashutoshsahoo/Downloads/Hopper/PHASE_16R_BUDGET_CONTROLLER_DESIGN.md)) activate deterministically.
+When aggregate API expenditure reaches the **$500 monthly limit**, the architectural mechanisms designed in Phase 16R.2 activate deterministically.
 
 ```mermaid
 sequenceDiagram

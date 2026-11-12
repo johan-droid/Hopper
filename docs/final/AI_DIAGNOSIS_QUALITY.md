@@ -59,7 +59,7 @@ Anthropic Claude 3.5 Haiku supports prompt caching (`cache_control: { type: 'eph
 However, rigorous architectural analysis reveals a critical constraint:
 > **Anthropic Prompt Caching Constraint:** Anthropic enforces a strict minimum cacheable prompt prefix of **2,048 tokens** for Claude 3.5 Haiku (and 1,024 tokens for Claude 3.5 Sonnet / Opus).
 
-If the cached system prompt and stable prefix is shorter than 2,048 tokens, the Anthropic API silently ignores the `cache_control` directive and bills the request at standard input token rates. Hopper documents this limitation in `KNOWN_LIMITATIONS.md` and budgets all financial reservations using standard (non-cached) input token pricing ($0.80 / MTok) to guarantee that budget caps can never be exceeded by un-cached prefixes.
+If the cached system prompt and stable prefix is shorter than 2,048 tokens, the Anthropic API silently ignores the `cache_control` directive and bills the request at standard input token rates. Hopper budgets all financial reservations using standard (non-cached) input token pricing ($0.80 / MTok) to guarantee that budget caps can never be exceeded by un-cached prefixes.
 
 ---
 

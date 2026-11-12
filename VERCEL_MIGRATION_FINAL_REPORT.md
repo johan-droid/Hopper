@@ -86,7 +86,6 @@ is no cross-origin surface in the default configuration.
 5 Cloudflare docs; 11 workflow files (9 Cloudflare deploy/CI + dependabot +
 pull-request).
 
-Full mapping: `docs/deployment/CLOUDFLARE_REMOVAL_AUDIT.md`.
 
 ## 5. Cloudflare dependencies removed
 
@@ -151,9 +150,6 @@ drained manually at any time.
 7. Secret scanning in CI (gitleaks, working tree), high-severity dependency audit,
    tracked-env guard, Cloudflare-artefact guard.
 8. AI telemetry can no longer report a deterministic fallback as a live diagnosis.
-
-Documented in `docs/security/SECRET_EXPOSURE_AUDIT.md` and
-`docs/security/CREDENTIAL_ROTATION_RUNBOOK.md`.
 
 ## 9. Build results
 
@@ -286,9 +282,6 @@ Full procedure: `docs/deployment/VERCEL_ROLLBACK_RUNBOOK.md`.
 | Setup quickstart | `docs/deployment/VERCEL_SETUP.md` |
 | Rollback runbook | `docs/deployment/VERCEL_ROLLBACK_RUNBOOK.md` |
 | Target architecture | `docs/architecture/VERCEL_TARGET_ARCHITECTURE.md` |
-| Cloudflare removal audit | `docs/deployment/CLOUDFLARE_REMOVAL_AUDIT.md` |
-| Secret exposure audit | `docs/security/SECRET_EXPOSURE_AUDIT.md` |
-| Credential rotation runbook | `docs/security/CREDENTIAL_ROTATION_RUNBOOK.md` |
 | Cost and limits | `docs/deployment/VERCEL_COST_AND_LIMITS.md` |
 | This report | `VERCEL_MIGRATION_FINAL_REPORT.md` |
 

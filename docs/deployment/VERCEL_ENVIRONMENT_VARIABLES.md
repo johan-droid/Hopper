@@ -76,8 +76,7 @@ required, and **no Cloudflare variable exists**.
 | `GITHUB_APP_PRIVATE_KEY` | PEM used to mint installation tokens | Yes | BE | All | **Yes** | GitHub App → Private keys (**rotate**) |
 
 > Production boot throws if `GITHUB_APP_WEBHOOK_SECRET` or
-> `GITHUB_APP_PRIVATE_KEY` is missing. See
-> `docs/security/CREDENTIAL_ROTATION_RUNBOOK.md`.
+> `GITHUB_APP_PRIVATE_KEY` is missing.
 
 ## 6. AI providers
 

@@ -35,7 +35,6 @@ whether they still work.
 3. GitHub App → **Private keys** → generate, delete the old one.
 4. Delete the local `.env.backup`.
 
-Full procedure: `docs/security/CREDENTIAL_ROTATION_RUNBOOK.md`.
 **Do not deploy before this is done.**
 
 ---

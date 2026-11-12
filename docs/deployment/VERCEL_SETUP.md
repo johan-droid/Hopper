@@ -46,8 +46,7 @@ Verify: <http://localhost:3000/api/health> and <http://localhost:5173>.
 3. Webhook secret: random 32+ bytes → `GITHUB_APP_WEBHOOK_SECRET`.
 4. Permissions: Pull requests (write), Contents (read), Checks (read), Actions
    (read); subscribe to **Workflow run** and **Workflow job**.
-5. If the credentials were ever committed, rotate them first
-   (`docs/security/CREDENTIAL_ROTATION_RUNBOOK.md`).
+5. If the credentials were ever committed, rotate them first.
 
 ---
 

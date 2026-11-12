@@ -118,8 +118,7 @@ Variables are not versioned per deployment:
 2. Restore the previous values in **Settings → Environment Variables**.
 3. **Redeploy** — running deployments keep the values they were built with.
 
-If a secret was leaked, rotate it (see `docs/security/CREDENTIAL_ROTATION_RUNBOOK.md`)
-rather than restoring the old value.
+If a secret was leaked, rotate it rather than restoring the old value.
 
 ---
 

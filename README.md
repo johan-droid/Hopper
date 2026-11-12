@@ -317,9 +317,6 @@ and a tracked-env-file guard.
 - **Configuration** — validated fail-closed at boot; no `process.exit()` in
   serverless paths; no secret is ever logged or shipped to the client.
 
-See `docs/security/SECRET_EXPOSURE_AUDIT.md` and
-`docs/security/CREDENTIAL_ROTATION_RUNBOOK.md`.
-
 ---
 
 ## Deployment

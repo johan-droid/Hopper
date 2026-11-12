@@ -27,7 +27,6 @@ flowchart TD
 ### Phase A — Complete Repository and Architecture Discovery (COMPLETED)
 - **Scope:** Read-only inspection of backend, frontend, database, queue, AI, and test infrastructure.
 - **Deliverables:**
-  - `docs/architecture/REPOSITORY_ARCHITECTURE_MAP.md`
   - `docs/architecture/BACKEND_DEPENDENCY_MAP.md`
   - `docs/architecture/DATABASE_AND_DATAFLOW.md`
   - `docs/architecture/API_AND_EVENT_CONTRACTS.md`

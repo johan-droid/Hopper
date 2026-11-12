@@ -101,7 +101,6 @@ Conduct a comprehensive, read-only architectural investigation across all backen
    - Single-provider Anthropic Claude 3.5 Haiku is cleanly isolated in `synthesizeDiagnosis()`. 10 failure categories and deterministic fallback are verified, but prompt caching is not enabled at the network layer.
 
 ### 4. Deliverables Produced in Phase A
-- `docs/architecture/REPOSITORY_ARCHITECTURE_MAP.md`
 - `docs/architecture/BACKEND_DEPENDENCY_MAP.md`
 - `docs/architecture/DATABASE_AND_DATAFLOW.md`
 - `docs/architecture/API_AND_EVENT_CONTRACTS.md`

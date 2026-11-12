@@ -131,7 +131,6 @@ npm --prefix backend test tests/migrations.test.ts
   docker exec -i hopper-api printenv ANTHROPIC_API_KEY | cut -c 1-10
   ```
 - If Anthropic rate limits (429) persist:
-  - Check `docs/engineering/PHASE_16R_BUDGET_CONTROLLER_DESIGN.md`.
   - The monthly \$500 budget cap controller rejects outbound paid calls once the application-side ceiling is reached, automatically preserving deterministic triage.
 
 ---

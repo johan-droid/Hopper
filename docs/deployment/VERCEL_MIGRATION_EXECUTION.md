@@ -19,8 +19,8 @@ incomplete · FAIL = broken · BLOCKED = requires external account/credential.
 | `.env.example` files rewritten with placeholders only | PASS | root, `backend/`, `frontend/` |
 | `.gitignore` hardened (`.env*`, `*.pem`, `*.key`, backups) | PASS | `.env.backup` ignored and untracked |
 | Secret files tracked in git | PASS (none) | `git ls-files` shows no `.env*` |
-| Git-history exposure reviewed | PASS (documented) | Revoked-but-unrotated material lives in history; rotation is the fix — see `docs/security/SECRET_EXPOSURE_AUDIT.md` |
-| Credential rotation checklist | PASS | `docs/security/CREDENTIAL_ROTATION_RUNBOOK.md` |
+| Git-history exposure reviewed | PASS (documented) | Revoked-but-unrotated material lives in history; rotation is the fix |
+| Credential rotation checklist | PASS | Rotation is an operator procedure |
 | Secret scanning in CI | PASS (configured) | `.github/workflows/security.yml` — gitleaks 8.18.4 working tree, `npm audit --audit-level=high`, tracked-env guard |
 | Rotation of the exposed GitHub App credentials | **BLOCKED** | Requires account-owner action in GitHub App settings |
 | Delete local `.env.backup` | **BLOCKED** (operator) | Left on disk, ignored; contains compromised material |
@@ -43,7 +43,7 @@ incomplete · FAIL = broken · BLOCKED = requires external account/credential.
 | Cloudflare secrets no longer read | PASS | `CLOUDFLARE_*` gone from env templates and code |
 | Cloudflare-specific tests removed/replaced | PASS | `cloudflare-ai.test.ts` deleted; provider contract tests cover the rest |
 | Frontend `_redirects` / `_headers` / `_routes.json` removed | PASS | SPA routing now in `vercel.json` |
-| No broken doc/script references to removed files | PASS | `CLOUDFLARE_REMOVAL_AUDIT.md`; legacy phase reports banner-marked historical |
+| No broken doc/script references to removed files | PASS | Cloudflare docs removed; remaining docs reference only live Vercel paths |
 | CI guard prevents reintroduction | PASS | `.github/workflows/ci.yml` step "Verify no Cloudflare deployment artifacts" |
 
 ## Phase 3 — BullMQ → durable queue (Vercel Queues + PostgreSQL outbox)
