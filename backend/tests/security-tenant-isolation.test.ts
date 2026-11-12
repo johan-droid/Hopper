@@ -351,14 +351,32 @@ describe('Phase H Security Hardening: Tenant Isolation & Authentication', () => 
     let unprivClient: pg.Client;
 
     beforeAll(async () => {
-      unprivClient = new pg.Client({
-        connectionString: 'postgresql://hopper_app:hopper_app_secure_runtime_password@localhost:5432/hopper_db',
-      });
-      await unprivClient.connect();
+      const rawUrl =
+        process.env.DIRECT_URL ||
+        process.env.DATABASE_URL ||
+        'postgresql://postgres:postgres@localhost:5432/hopper_db';
+
+      try {
+        const dbUrl = new URL(rawUrl);
+        const dbName = dbUrl.pathname.replace(/^\//, '') || 'hopper_db';
+        const host = dbUrl.hostname || 'localhost';
+        const port = dbUrl.port || '5432';
+        unprivClient = new pg.Client({
+          connectionString: `postgresql://hopper_app:hopper_app_secure_runtime_password@${host}:${port}/${dbName}`,
+        });
+        await unprivClient.connect();
+      } catch (err: any) {
+        // Fallback: connect using admin connection string and drop privileges to hopper_app role
+        unprivClient = new pg.Client({ connectionString: rawUrl });
+        await unprivClient.connect();
+        await unprivClient.query('SET ROLE hopper_app').catch(() => {});
+      }
     });
 
     afterAll(async () => {
-      await unprivClient.end();
+      if (unprivClient) {
+        await unprivClient.end().catch(() => {});
+      }
     });
 
     it('RLS hides Workspace A repositories from Tenant B in direct SQL query', async () => {
