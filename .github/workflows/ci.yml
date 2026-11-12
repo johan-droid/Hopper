@@ -69,6 +69,9 @@ jobs:
       - name: Frontend typecheck
         run: npm --prefix frontend run lint
 
+      - name: Run database migrations
+        run: npm --prefix backend run migrate
+
       - name: Backend tests
         run: npm --prefix backend run test
 
