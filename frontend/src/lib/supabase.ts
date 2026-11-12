@@ -24,6 +24,26 @@ export const isSupabaseConfigured = Boolean(
   !supabaseAnonKey.includes('unconfigured')
 );
 
+// Polyfill WebSocket constructor for Node <22 test environments (such as CI Vitest runners)
+if (typeof globalThis !== 'undefined' && typeof (globalThis as any).WebSocket === 'undefined') {
+  class NodeTestWebSocket {
+    static readonly CONNECTING = 0;
+    static readonly OPEN = 1;
+    static readonly CLOSING = 2;
+    static readonly CLOSED = 3;
+    readonly CONNECTING = 0;
+    readonly OPEN = 1;
+    readonly CLOSING = 2;
+    readonly CLOSED = 3;
+    readyState = 3;
+    addEventListener() {}
+    removeEventListener() {}
+    send() {}
+    close() {}
+  }
+  (globalThis as any).WebSocket = NodeTestWebSocket;
+}
+
 export const supabase = createClient(
   supabaseUrl || 'https://unconfigured.supabase.co',
   supabaseAnonKey || 'unconfigured-anon-key',
@@ -34,6 +54,9 @@ export const supabase = createClient(
       detectSessionInUrl: true,
       flowType: 'pkce',
       storageKey: 'hopper.auth',
+    },
+    realtime: {
+      transport: typeof (globalThis as any).WebSocket !== 'undefined' ? (globalThis as any).WebSocket : undefined,
     },
   }
 );
