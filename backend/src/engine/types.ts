@@ -4,8 +4,7 @@
  * shared across all Hopper Engine sub-systems.
  */
 
-import { z } from 'zod';
-import { DiagnosisOutput, ErrorCategory } from '../lib/ai/diagnose.js';
+import { DiagnosisOutput } from '../lib/ai/diagnose.js';
 import { PlanTier } from '../lib/billing/quota-guard.js';
 
 export type EventSource = 'github' | 'gitlab' | 'local' | 'adhoc';

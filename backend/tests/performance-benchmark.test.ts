@@ -1,5 +1,4 @@
 import { describe, it } from 'vitest';
-import crypto from 'node:crypto';
 import { createServer } from '../src/server/index.js';
 import { verifyGitHubWebhookSignature, generateWebhookSignature } from '../src/lib/github/app-auth.js';
 import { sliceFailedStepLog } from '../src/lib/parser/log-slicer.js';
@@ -40,7 +39,7 @@ describe('Phase 12: Performance & Scalability Baseline Benchmarks', () => {
     const logByteSize = Buffer.byteLength(largeLog, 'utf8');
 
     const redactStart = performance.now();
-    const scrubbed = scrubSecrets(largeLog);
+    scrubSecrets(largeLog);
     const redactMs = performance.now() - redactStart;
     console.log(`[Secret Scrubber] 10,000 lines (${(logByteSize / 1024).toFixed(1)} KB) scrubbed in ${redactMs.toFixed(2)}ms`);
 
@@ -63,7 +62,7 @@ describe('Phase 12: Performance & Scalability Baseline Benchmarks', () => {
     // 5. Live Database Query Latency
     const db = getDatabaseExecutor();
     const dbSelectStart = performance.now();
-    const dbRes = await db.query('SELECT 1 AS num');
+    await db.query('SELECT 1 AS num');
     const dbSelectMs = performance.now() - dbSelectStart;
     console.log(`[Database Query] Ping SELECT 1 in ${dbSelectMs.toFixed(2)}ms`);
 

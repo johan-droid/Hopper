@@ -15,7 +15,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { GitHubRateLimiter, RequestPriority } from '../src/lib/github/rate-limiter.js';
-import { GitHubApiClient, GitHubApiError } from '../src/lib/github/api-client.js';
+import { GitHubApiClient } from '../src/lib/github/api-client.js';
 import {
   getInstallationToken,
   clearTokenCache,
@@ -24,15 +24,12 @@ import {
 import {
   upsertPrStickyComment,
   createGitHubCheckRun,
-  triggerWorkflowRerun,
   recordPublicationAttempt,
 } from '../src/lib/github/pr-reporter.js';
 import { GitHubSyncService } from '../src/lib/github/sync-service.js';
 import { DiagnosisOutputSchema } from '../src/lib/ai/diagnose.js';
 import { OrganizationRepository } from '../src/db/repositories/organization.repository.js';
 import { RepositoryRepository } from '../src/db/repositories/repository.repository.js';
-import { WorkspaceRepository } from '../src/db/repositories/workspace.repository.js';
-import { UserProfileRepository } from '../src/db/repositories/user-profile.repository.js';
 import { DatabaseExecutor, QueryResultLike } from '../src/db/client.js';
 import { createApp } from '../src/server/app.js';
 import crypto from 'node:crypto';
@@ -40,12 +37,10 @@ import http from 'node:http';
 
 describe('GitHub Integration, Distributed Rate Limiting & Lifecycle Hardening', () => {
   let rateLimiter: GitHubRateLimiter;
-  let apiClient: GitHubApiClient;
 
   beforeEach(() => {
     rateLimiter = new GitHubRateLimiter();
     rateLimiter.clearMemoryState();
-    apiClient = new GitHubApiClient(rateLimiter);
     clearTokenCache();
   });
 
@@ -245,7 +240,7 @@ describe('GitHub Integration, Distributed Rate Limiting & Lifecycle Hardening', 
       await new Promise<void>((resolve) => targetServer.listen(0, resolve));
       const targetPort = (targetServer.address() as any).port;
 
-      const redirectServer = http.createServer((req, res) => {
+      const redirectServer = http.createServer((_req, res) => {
         res.writeHead(302, {
           Location: `http://127.0.0.1:${targetPort}/download`,
         });

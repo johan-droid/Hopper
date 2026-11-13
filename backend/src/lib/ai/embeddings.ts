@@ -75,8 +75,6 @@ export async function generateEmbedding(
   text: string,
   options: EmbeddingOptions = {}
 ): Promise<number[]> {
-  const provider = (options.provider || process.env.AI_PROVIDER || 'openai').toLowerCase();
-
   // 2. OpenAI Embeddings
   const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
   const isMock = !apiKey || apiKey.startsWith('sk-proj-mock') || process.env.AI_PROVIDER === 'mock';

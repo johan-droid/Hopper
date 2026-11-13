@@ -465,7 +465,7 @@ export async function triggerWorkflowRerun(
   const url = `https://api.github.com/repos/${repoFullName}/actions/runs/${runId}/rerun-failed-jobs`;
 
   try {
-    const res = await defaultGitHubApiClient.request(url, {
+    await defaultGitHubApiClient.request(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${installationToken}`,

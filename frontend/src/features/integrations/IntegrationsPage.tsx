@@ -12,7 +12,8 @@ import {
   StatusDot,
 } from '../../components/ui/primitives';
 import { formatNumber } from '../../lib/format';
-import { CircleDashed, Github, Sparkles, CreditCard, Database } from 'lucide-react';
+import { CircleDashed, Sparkles, CreditCard, Database } from 'lucide-react';
+import { GithubIcon } from '../../components/ui/primitives';
 
 type IntegrationState = 'verified' | 'unverified' | 'unavailable';
 
@@ -38,7 +39,7 @@ const IntegrationsPage: React.FC = () => {
     {
       name: 'GitHub Authentication',
       purpose: 'OAuth 2.0 Web Application Flow & Personal Access Token verification',
-      icon: Github,
+      icon: GithubIcon,
       state: status === 'authenticated' ? 'verified' : 'unverified',
       detail:
         status === 'authenticated'
@@ -78,7 +79,7 @@ const IntegrationsPage: React.FC = () => {
     {
       name: 'GitHub App',
       purpose: 'Webhook ingress, installation tokens, PR comments',
-      icon: Github,
+      icon: GithubIcon,
       state: 'unverified',
       detail:
         'Credentials are server-side only, so this page cannot read them. Confirm delivery in the GitHub App’s Recent Deliveries.',

@@ -4,7 +4,7 @@ import { Request, Response, NextFunction } from 'express';
  * Enterprise HTTP Security Headers Middleware.
  * Enforces OWASP-recommended headers across all responses.
  */
-export function securityHeadersMiddleware(req: Request, res: Response, next: NextFunction): void {
+export function securityHeadersMiddleware(_req: Request, res: Response, next: NextFunction): void {
   // Prevent MIME type sniffing
   res.setHeader('X-Content-Type-Options', 'nosniff');
 

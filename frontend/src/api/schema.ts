@@ -26,7 +26,7 @@ const DependencyHealthSchema = z
     pending: z.number().optional(),
     failed: z.number().optional(),
   })
-  .passthrough();
+  .loose();
 
 export const HealthSchema = z.object({
   status: z.string(),
@@ -44,7 +44,7 @@ export const HealthSchema = z.object({
       queue: DependencyHealthSchema.optional(),
       redis: DependencyHealthSchema.optional(),
     })
-    .passthrough()
+    .loose()
     .optional(),
 });
 export type HealthData = z.infer<typeof HealthSchema>;
@@ -142,7 +142,7 @@ export const AdhocDiagnoseResponseSchema = z.object({
           test_name: z.string().nullable().optional(),
           reasoning: z.string().optional(),
         })
-        .passthrough()
+        .loose()
         .optional(),
       relevant_log_lines: z.array(
         z.object({
@@ -155,7 +155,7 @@ export const AdhocDiagnoseResponseSchema = z.object({
       suggested_next_check: z.string().optional(),
       local_repro_command: z.string().nullable().optional(),
     })
-    .passthrough(),
+    .loose(),
   // Present when the deterministic provider answered instead of a live model.
   provider: z.string().optional(),
   isFallback: z.boolean().optional(),

@@ -5,10 +5,10 @@ import { signOut, useSession, syncGitHub } from '../../features/auth/useSession'
 import { useHealthQuery, queryKeys } from '../../api/hooks';
 import { useUiStore } from '../../store/useAppStore';
 import { useWorkspace } from '../../features/workspace/WorkspaceProvider';
-import { Badge, Button, IconButton, Kbd, StatusDot } from '../ui/primitives';
+import { Badge, Button, IconButton, Kbd, StatusDot, GithubIcon } from '../ui/primitives';
 import { Tooltip, useToast } from '../ui/feedback';
 import { ROUTES } from '../../lib/routes';
-import { Command, LogOut, Menu, Moon, Search, Sun, User, RefreshCw, Github, Sparkles } from 'lucide-react';
+import { Command, LogOut, Menu, Moon, Search, Sun, User, RefreshCw, Sparkles } from 'lucide-react';
 
 export const Topbar: React.FC<{ onOpenMobileNav: () => void }> = ({ onOpenMobileNav }) => {
   const navigate = useNavigate();
@@ -171,7 +171,7 @@ export const Topbar: React.FC<{ onOpenMobileNav: () => void }> = ({ onOpenMobile
                     {user?.email || (user?.login ? `@${user.login}` : '')}
                   </p>
                   <div className="mt-1 flex items-center gap-1 text-[10px] text-accent">
-                    <Github className="h-3 w-3" />
+                    <GithubIcon className="h-3 w-3" />
                     <span>Authenticated via GitHub</span>
                   </div>
                 </div>

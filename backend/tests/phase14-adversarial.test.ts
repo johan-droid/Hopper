@@ -15,13 +15,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { createServer } from '../src/server/index.js';
-import { getDatabaseExecutor, query, withTransaction } from '../src/db/client.js';
+import { query, withTransaction } from '../src/db/client.js';
 import { WorkspaceRepository } from '../src/db/repositories/workspace.repository.js';
 import { UserProfileRepository } from '../src/db/repositories/user-profile.repository.js';
 import { OrganizationRepository } from '../src/db/repositories/organization.repository.js';
 import { verifyJwtToken, DEFAULT_DEV_JWT_SECRET } from '../src/server/middleware/auth.js';
 import { generateStripeWebhookSignature, handleStripeWebhookEvent } from '../src/lib/billing/stripe-handler.js';
-import { enqueueWorkflowJob, CI_EVENTS_QUEUE_NAME } from '../src/queue/ci-queue.js';
+import { enqueueWorkflowJob } from '../src/queue/ci-queue.js';
 import { acquireDiagnosisLock, releaseDiagnosisLock, setCoordinationBackend } from '../src/queue/coordination.js';
 import { setJobStore } from '../src/queue/job-store.js';
 

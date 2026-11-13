@@ -7,7 +7,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer } from '../src/server/index.js';
 import { getDatabasePool } from '../src/db/client.js';
-import { UserProfileRepository } from '../src/db/repositories/user-profile.repository.js';
 import { OrganizationRepository } from '../src/db/repositories/organization.repository.js';
 import { RepositoryRepository } from '../src/db/repositories/repository.repository.js';
 import { processWorkflowJob } from '../src/workers/processors/workflow-job.processor.js';
@@ -19,7 +18,6 @@ describe('Phase 13: End-to-End SaaS User Journeys (A through G)', () => {
   let server: any;
   let port: number;
   const pool = getDatabasePool();
-  const profileRepo = new UserProfileRepository();
   const orgRepo = new OrganizationRepository();
   const repoRepo = new RepositoryRepository();
 

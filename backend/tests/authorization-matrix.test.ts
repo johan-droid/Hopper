@@ -48,7 +48,7 @@ describe('Phase 12: Authorization Matrix & Tenant Isolation (IDOR Defense)', () 
     port = typeof address === 'object' && address ? address.port : 0;
 
     // 1. Initialize profiles
-    const initProfile = async (token: string, name: string) => {
+    const initProfile = async (token: string, _name: string) => {
       const res = await fetch(`http://127.0.0.1:${port}/api/user/profile`, {
         headers: { Authorization: `Bearer ${token}` },
       });

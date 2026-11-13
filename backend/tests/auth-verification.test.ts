@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import crypto from 'node:crypto';
-import { verifyJwtToken, DEFAULT_DEV_JWT_SECRET } from '../src/server/middleware/auth.js';
+import { verifyJwtToken } from '../src/server/middleware/auth.js';
 import {
   generateSignedOAuthState,
   verifySignedOAuthState,
@@ -205,7 +205,7 @@ describe('Phase 12: Independent Authentication Verification (10-Point Suite)', (
     expect(verifySignedOAuthState(state, 600, testSecret)).toBe(true);
 
     // Tampered state verification
-    const [nonce, ts, sig] = state.split('.');
+    const [nonce, ts] = state.split('.');
     const tampered = `${nonce}.${ts}.badsignature1234567890abcdef`;
     expect(verifySignedOAuthState(tampered, 600, testSecret)).toBe(false);
 

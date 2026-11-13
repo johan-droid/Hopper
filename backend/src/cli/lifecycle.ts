@@ -11,7 +11,6 @@ import { computeFailureSignature } from '../lib/parser/fingerprinter.js';
 import { calculateFlakinessScore } from '../lib/moat/flakiness-engine.js';
 import { synthesizeDiagnosis } from '../lib/ai/diagnose.js';
 import { renderGitHubPrComment } from '../lib/github/pr-reporter.js';
-import { checkQuota } from '../lib/billing/quota-guard.js';
 import { SAMPLE_RAW_LOGS } from '../lib/github/log-fetcher.js';
 
 export interface LifecycleStageResult {
@@ -98,7 +97,6 @@ export async function runEntireLifecycle(rootDir: string = process.cwd()): Promi
     // -------------------------------------------------------------------------
     await executeStage(3, 'Database Migration & pgvector Schema DDL Check', async () => {
       const schemaFile = path.join(rootDir, 'supabase', 'migrations', '0001_initial_schema.sql');
-      const seedFile = path.join(rootDir, 'supabase', 'seed.sql');
 
       if (!fs.existsSync(schemaFile)) {
         throw new Error(`Missing initial migration file at ${schemaFile}`);
@@ -212,7 +210,7 @@ export async function runEntireLifecycle(rootDir: string = process.cwd()): Promi
         slicedLogSnippet: sliced.cleanedSnippet,
       });
 
-      const comment = renderGitHubPrComment({
+      renderGitHubPrComment({
         orgPlan: 'free',
         repoFullName: 'acme/payments-service',
         workflowName: 'CI',

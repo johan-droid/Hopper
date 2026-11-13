@@ -42,7 +42,6 @@ describe('Phase H Security Hardening: Tenant Isolation & Authentication', () => 
   let repoA: any;
   let sigA: any;
   let failureA: any;
-  let reportA: any;
   let orgA: any;
   const orgSlugA = `tenant-a-org-${runSuffix}`;
 
@@ -145,7 +144,7 @@ describe('Phase H Security Hardening: Tenant Isolation & Authentication', () => 
       exitCode: 1,
     });
 
-    reportA = await reportRepo.create({
+    await reportRepo.create({
       failureId: failureA.id,
       rootCauseClues: 'Unit test assertion failed due to unexpected boolean state',
       likelyFlakyTest: 'vitest run',

@@ -1,12 +1,12 @@
 import React from 'react';
 import {
-  Github,
   Terminal,
   Fingerprint,
   Activity,
   MessageSquare,
   ShieldCheck,
 } from 'lucide-react';
+import { GithubIcon } from './primitives';
 
 interface Step {
   id: string;
@@ -24,7 +24,7 @@ const STEPS: Step[] = [
     title: 'Ingest CI Failure Event',
     detail: 'HMAC-SHA256 verified GitHub App webhook ingress for workflow_job and workflow_run events. Deduplicated in PostgreSQL.',
     tag: 'GitHub App',
-    icon: Github,
+    icon: GithubIcon,
   },
   {
     id: 'slice',

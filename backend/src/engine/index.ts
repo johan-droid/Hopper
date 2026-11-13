@@ -29,7 +29,7 @@ import {
   DatabaseExecutor,
 } from '../db/index.js';
 import { CanonicalCIEvent, EngineDiagnosisResult } from './types.js';
-import { checkQuota, reserveQuota } from '../lib/billing/quota-guard.js';
+import { reserveQuota } from '../lib/billing/quota-guard.js';
 import { DiagnosisOutputSchema } from '../lib/ai/diagnose.js';
 import { claimProcessedEvent } from '../queue/coordination.js';
 

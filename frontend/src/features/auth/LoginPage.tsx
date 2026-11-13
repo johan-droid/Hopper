@@ -14,9 +14,9 @@ import {
 } from '../../components/ui/primitives';
 import { DotGridBackground } from '../../components/ui/DotGridBackground';
 import { WorkflowVisualizer } from '../../components/ui/WorkflowVisualizer';
+import { GithubIcon } from '../../components/ui/primitives';
 import {
   Zap,
-  Github,
   ShieldCheck,
   ArrowRight,
   Info,
@@ -191,7 +191,7 @@ const LoginPage: React.FC = () => {
               {/* Header */}
               <div className="text-center sm:text-left">
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-hairline bg-inset text-ink shadow-inner sm:mx-0">
-                  <Github className="h-6 w-6" aria-hidden="true" />
+                  <GithubIcon className="h-6 w-6" />
                 </div>
                 <h2 className="mt-4 text-xl font-bold tracking-tight text-ink sm:text-2xl">
                   Sign in to Hopper
@@ -233,7 +233,7 @@ const LoginPage: React.FC = () => {
                   disabled={status === 'loading'}
                   aria-label="Continue with GitHub"
                 >
-                  <Github className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110" />
+                  <GithubIcon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110" />
                   <span>Continue with GitHub</span>
                 </Button>
 

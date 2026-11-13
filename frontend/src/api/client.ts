@@ -79,7 +79,7 @@ const SAFE_STATUS_MESSAGES: Record<number, string> = {
   503: 'The service is temporarily unavailable.',
 };
 
-export async function request<S extends z.ZodTypeAny>(
+export async function request<S extends z.ZodType>(
   endpoint: string,
   options: RequestInit = {},
   schema: S

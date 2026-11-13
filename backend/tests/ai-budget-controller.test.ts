@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { AiBudgetController, BUDGET_LIMIT_USD, NOMINAL_ADMISSION_CAP_USD } from '../src/lib/ai/budget-controller.js';
+import { AiBudgetController } from '../src/lib/ai/budget-controller.js';
 import { getDatabaseExecutor } from '../src/db/client.js';
 
 describe('Hopper Phase 16R.2: Authoritative AI Budget Controller', () => {

@@ -19,7 +19,6 @@ import { fetchJobLogStream } from '../src/lib/github/log-fetcher.js';
 describe('Production Remediation & Architecture Hardening', () => {
   const db = getDatabaseExecutor();
   const controller = new AiBudgetController(db);
-  const coordination = new PostgresCoordination(db);
 
   let orgAId: string;
   let orgBId: string;

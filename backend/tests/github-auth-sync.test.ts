@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createApp } from '../src/server/app.js';
-import { UserProfileRepository } from '../src/db/repositories/user-profile.repository.js';
-import { WorkspaceRepository } from '../src/db/repositories/workspace.repository.js';
-import { OrganizationRepository } from '../src/db/repositories/organization.repository.js';
 import { RepositoryRepository } from '../src/db/repositories/repository.repository.js';
 
 describe('GitHub Authentication & Synchronization Engine', () => {

@@ -158,7 +158,7 @@ export async function processSlackAlert(
         });
 
         if (flakinessScore >= HIGH_FLAKINESS_THRESHOLD) {
-          const failures = await workflowFailureRepo.findFailuresBySignatureId(
+          await workflowFailureRepo.findFailuresBySignatureId(
             existingSignature.id,
             1
           );

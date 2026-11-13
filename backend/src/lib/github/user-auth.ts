@@ -142,7 +142,6 @@ export async function fetchGitHubUser(accessToken: string): Promise<GitHubUserPr
     accessToken.startsWith('test_') ||
     process.env.AI_PROVIDER === 'mock'
   ) {
-    const suffix = accessToken.slice(0, 16).replace(/[^a-zA-Z0-9]/g, '');
     return {
       id: 1029384,
       login: 'johan-droid',
