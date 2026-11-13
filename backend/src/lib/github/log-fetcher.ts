@@ -158,17 +158,32 @@ export async function fetchJobLogStream(options: FetchJobLogOptions): Promise<st
 
   try {
     const url = `https://api.github.com/repos/${options.repoFullName}/actions/jobs/${options.jobId}/logs`;
-    const response = await fetch(url, {
-      redirect: 'follow',
+    let response = await fetch(url, {
+      redirect: 'manual',
       headers: {
         Authorization: `Bearer ${options.installationToken}`,
         Accept: 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
         'User-Agent': 'Hopper-CI-Doctor/1.0',
       },
+      signal: AbortSignal.timeout(15_000),
     });
 
+    // Strip authorization header when following redirects to external pre-signed storage URLs (e.g. AWS S3)
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const location = response.headers.get('location');
+      if (location) {
+        response = await fetch(location, {
+          redirect: 'follow',
+          signal: AbortSignal.timeout(15_000),
+        });
+      }
+    }
+
     if (!response.ok) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(`[LogFetcher] GitHub log stream failed with status ${response.status} for job ${options.jobId}`);
+      }
       console.warn(`[LogFetcher] GitHub log stream returned status ${response.status}. Using fallback log.`);
       return SAMPLE_RAW_LOGS.jest_assertion_fail;
     }
@@ -183,6 +198,9 @@ export async function fetchJobLogStream(options: FetchJobLogOptions): Promise<st
     const fullLog = await response.text();
     return fullLog.length > maxBytes ? fullLog.slice(-maxBytes) : fullLog;
   } catch (err: any) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`[LogFetcher] Failed to stream GitHub logs for job ${options.jobId}: ${err.message}`);
+    }
     console.warn(`[LogFetcher] Network failure while streaming log: ${err.message}. Using fallback.`);
     return SAMPLE_RAW_LOGS.jest_assertion_fail;
   }

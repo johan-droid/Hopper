@@ -120,12 +120,27 @@ export class OrganizationRepository {
 
   /**
    * Atomic TOCTOU-safe run quota reservation.
-   * Atomically increments runs_used_this_period IF AND ONLY IF current runs < limit.
+   * Atomically resets expired billing period and increments runs_used_this_period IF AND ONLY IF current runs < limit.
    */
   async tryReserveRunQuota(
     orgId: string,
     limit: number
   ): Promise<{ allowed: boolean; runsUsed: number }> {
+    // 1. Advance expired billing period concurrency-safely
+    try {
+      await this.db.query(
+        `UPDATE organizations
+         SET runs_used_this_period = 0,
+             billing_period_reset_at = NOW() + INTERVAL '30 days',
+             updated_at = NOW()
+         WHERE id = $1 AND billing_period_reset_at IS NOT NULL AND billing_period_reset_at <= NOW()`,
+        [orgId]
+      );
+    } catch {
+      // Ignore if column or schema is in mock mode
+    }
+
+    // 2. Atomically increment if usage < limit
     const sql = `
       UPDATE organizations
       SET runs_used_this_period = runs_used_this_period + 1, updated_at = NOW()

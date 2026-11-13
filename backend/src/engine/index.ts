@@ -31,6 +31,7 @@ import {
 import { CanonicalCIEvent, EngineDiagnosisResult } from './types.js';
 import { checkQuota, reserveQuota } from '../lib/billing/quota-guard.js';
 import { DiagnosisOutputSchema } from '../lib/ai/diagnose.js';
+import { claimProcessedEvent } from '../queue/coordination.js';
 
 export * from './types.js';
 export * from './ingestion/ingestion.engine.js';
@@ -142,7 +143,12 @@ export class HopperEngine {
       this.orgRepo,
       pipelineContext.org.id,
       pipelineContext.org.plan,
-      pipelineContext.org.runsUsed
+      pipelineContext.org.runsUsed,
+      undefined,
+      {
+        githubRunId: event.githubRunId,
+        claimEvent: typeof (this.orgRepo as any)?.tryReserveRunQuota === 'function' ? claimProcessedEvent : undefined,
+      }
     );
     if (!quota.allowed) {
       this.observability.warn(`Quota exceeded for organization ${pipelineContext.org.login}`, { correlationId });

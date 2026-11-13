@@ -35,6 +35,7 @@ export class DiagnosisEngine {
     };
   }): Promise<DiagnosisOutput> {
     const diagnosisContext: DiagnosisContext = {
+      organizationId: params.context?.org?.id,
       workflowName: params.workflowName,
       jobName: params.jobName,
       stepName: params.stepName,

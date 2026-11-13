@@ -77,6 +77,7 @@ export const PRICING_REGISTRY: Record<string, ModelPricing> = {
 };
 
 export interface ReserveBudgetParams {
+  organizationId?: string;
   idempotencyKey?: string;
   jobId?: string;
   failureId?: string;
@@ -150,27 +151,95 @@ export class AiBudgetController {
 
     const idempotencyKey = params.idempotencyKey || `res_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
     const reservationAmount = isFreeTierProvider ? 0.0001 : STANDARD_RESERVATION_USD;
+    const isOrgUuid = params.organizationId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.organizationId) : false;
+    const orgId = isOrgUuid ? params.organizationId : undefined;
 
     return this.executeTx(async (tx) => {
-      // 1. Lock active monthly ledger row exclusively
-      const ledgerRes = await tx.query<any>(
-        `SELECT id, period_start, period_end, budget_limit_usd, nominal_cap_usd,
-                settled_spend_usd, reserved_spend_usd, uncertain_spend_usd
-         FROM ai_budget_ledgers
-         WHERE period_start <= NOW() AND period_end > NOW() AND is_active = TRUE
-         FOR UPDATE`
-      );
+      // 0. Replay Protection: Check if this idempotency key was already reserved for this tenant
+      if (params.idempotencyKey) {
+        const idempSql = orgId
+          ? `SELECT id, total_reserved_usd, actual_cost_usd, status
+             FROM ai_cost_reservations
+             WHERE organization_id = $1 AND idempotency_key = $2 LIMIT 1`
+          : `SELECT id, total_reserved_usd, actual_cost_usd, status
+             FROM ai_cost_reservations
+             WHERE organization_id IS NULL AND idempotency_key = $1 LIMIT 1`;
+        const idempParams = orgId
+          ? [orgId, idempotencyKey]
+          : [idempotencyKey];
+        const existingRes = await tx.query<any>(idempSql, idempParams);
+        if (existingRes.rows.length > 0) {
+          const existing = existingRes.rows[0];
+          return {
+            allowed: true,
+            reservationId: existing.id,
+            reservedAmountUsd: parseFloat(existing.total_reserved_usd || 0),
+            currentSpendUsd: 0,
+            effectiveAvailableUsd: 0,
+          };
+        }
+      }
+
+      // 1. Lock active monthly ledger row exclusively (tenant-scoped or global)
+      let ledgerRes: any;
+      if (orgId) {
+        ledgerRes = await tx.query<any>(
+          `SELECT id, period_start, period_end, budget_limit_usd, nominal_cap_usd,
+                  settled_spend_usd, reserved_spend_usd, uncertain_spend_usd
+           FROM ai_budget_ledgers
+           WHERE organization_id = $1 AND period_start <= NOW() AND period_end > NOW() AND is_active = TRUE
+           FOR UPDATE`,
+          [orgId]
+        );
+      } else {
+        ledgerRes = await tx.query<any>(
+          `SELECT id, period_start, period_end, budget_limit_usd, nominal_cap_usd,
+                  settled_spend_usd, reserved_spend_usd, uncertain_spend_usd
+           FROM ai_budget_ledgers
+           WHERE organization_id IS NULL AND period_start <= NOW() AND period_end > NOW() AND is_active = TRUE
+           FOR UPDATE`
+        );
+      }
 
       let ledger = ledgerRes.rows[0];
 
       // Auto-initialize current month if missing
       if (!ledger) {
-        const initRes = await tx.query<any>(
-          `INSERT INTO ai_budget_ledgers (period_start, period_end, budget_limit_usd, nominal_cap_usd)
-           VALUES (date_trunc('month', NOW()), date_trunc('month', NOW()) + INTERVAL '1 month', 500.0000, 475.0000)
-           RETURNING *`
-        );
-        ledger = initRes.rows[0];
+        if (orgId) {
+          const settingsRes = await tx.query<any>(
+            `SELECT monthly_limit_usd, nominal_cap_usd, enabled
+             FROM organization_ai_budget_settings
+             WHERE organization_id = $1`,
+            [orgId]
+          );
+          const settings = settingsRes.rows[0];
+          if (settings && !settings.enabled) {
+            return {
+              allowed: false,
+              reservedAmountUsd: 0,
+              currentSpendUsd: 0,
+              effectiveAvailableUsd: 0,
+              rejectionReason: `ORGANIZATION_AI_BUDGET_DISABLED: AI budget is disabled for organization ${orgId}`,
+            };
+          }
+          const limitUsd = settings ? parseFloat(settings.monthly_limit_usd) : 50.0;
+          const nominalCapUsd = settings ? parseFloat(settings.nominal_cap_usd) : limitUsd * 0.95;
+
+          const initRes = await tx.query<any>(
+            `INSERT INTO ai_budget_ledgers (organization_id, period_start, period_end, budget_limit_usd, nominal_cap_usd)
+             VALUES ($1, date_trunc('month', NOW()), date_trunc('month', NOW()) + INTERVAL '1 month', $2, $3)
+             RETURNING *`,
+            [orgId, limitUsd, nominalCapUsd]
+          );
+          ledger = initRes.rows[0];
+        } else {
+          const initRes = await tx.query<any>(
+            `INSERT INTO ai_budget_ledgers (period_start, period_end, budget_limit_usd, nominal_cap_usd)
+             VALUES (date_trunc('month', NOW()), date_trunc('month', NOW()) + INTERVAL '1 month', 500.0000, 475.0000)
+             RETURNING *`
+          );
+          ledger = initRes.rows[0];
+        }
       }
 
       const settled = parseFloat(ledger.settled_spend_usd || 0);
@@ -193,7 +262,7 @@ export class AiBudgetController {
         };
       }
 
-      // Check Nominal Admission Cap ($475)
+      // Check Nominal Admission Cap ($475 or 95% of org limit)
       if (totalCommitted + reservationAmount > nominalCap) {
         return {
           allowed: false,
@@ -207,12 +276,13 @@ export class AiBudgetController {
       // 2. Insert reservation record
       const insertRes = await tx.query<any>(
         `INSERT INTO ai_cost_reservations (
-           ledger_id, idempotency_key, job_id, failure_id, repo_id,
+           organization_id, ledger_id, idempotency_key, job_id, failure_id, repo_id,
            provider, model, pricing_version, status,
            estimated_cost_usd, safety_margin_usd, total_reserved_usd, expires_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'reserved', $9, $10, $11, NOW() + INTERVAL '120 seconds')
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'reserved', $10, $11, $12, NOW() + INTERVAL '120 seconds')
          RETURNING id`,
         [
+          orgId || null,
           ledger.id,
           idempotencyKey,
           params.jobId || null,
@@ -265,7 +335,7 @@ export class AiBudgetController {
   async settleReservation(params: SettleReservationParams): Promise<number> {
     return this.executeTx(async (tx) => {
       const resQuery = await tx.query<any>(
-        `SELECT id, ledger_id, provider, model, total_reserved_usd, status
+        `SELECT id, ledger_id, provider, model, total_reserved_usd, actual_cost_usd, status
          FROM ai_cost_reservations
          WHERE id = $1
          FOR UPDATE`,
@@ -275,6 +345,11 @@ export class AiBudgetController {
       const reservation = resQuery.rows[0];
       if (!reservation) {
         throw new Error(`Reservation ${params.reservationId} not found`);
+      }
+
+      // Idempotency: if already settled, return previously recorded actual cost without double counting
+      if (reservation.status === 'settled') {
+        return parseFloat(reservation.actual_cost_usd || 0);
       }
 
       const pricing = PRICING_REGISTRY[reservation.model] || PRICING_REGISTRY['claude-3-5-haiku-20241022'];
@@ -350,6 +425,7 @@ export class AiBudgetController {
 
       const reservation = resQuery.rows[0];
       if (!reservation) return;
+      if (reservation.status === 'failed_confirmed_zero') return;
 
       const reservedAmount = parseFloat(reservation.total_reserved_usd);
 
@@ -389,6 +465,7 @@ export class AiBudgetController {
 
       const reservation = resQuery.rows[0];
       if (!reservation) return;
+      if (reservation.status === 'usage_unknown') return;
 
       const reservedAmount = parseFloat(reservation.total_reserved_usd);
 
@@ -414,14 +491,20 @@ export class AiBudgetController {
   }
 
   /**
-   * Fetch current monthly ledger state.
+   * Fetch current monthly ledger state (for a specific organization or global).
    */
-  async getActiveLedger(): Promise<BudgetLedgerSummary | null> {
-    const res = await this.db.query<any>(
-      `SELECT * FROM ai_budget_ledgers
-       WHERE period_start <= NOW() AND period_end > NOW() AND is_active = TRUE
-       LIMIT 1`
-    );
+  async getActiveLedger(organizationId?: string): Promise<BudgetLedgerSummary | null> {
+    const isOrgUuid = organizationId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(organizationId) : false;
+    const orgId = isOrgUuid ? organizationId : undefined;
+    const query = orgId
+      ? `SELECT * FROM ai_budget_ledgers
+         WHERE organization_id = $1 AND period_start <= NOW() AND period_end > NOW() AND is_active = TRUE
+         LIMIT 1`
+      : `SELECT * FROM ai_budget_ledgers
+         WHERE organization_id IS NULL AND period_start <= NOW() AND period_end > NOW() AND is_active = TRUE
+         LIMIT 1`;
+    const params = orgId ? [orgId] : [];
+    const res = await this.db.query<any>(query, params);
 
     const row = res.rows[0];
     if (!row) return null;

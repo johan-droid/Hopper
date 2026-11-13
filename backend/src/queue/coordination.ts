@@ -21,6 +21,7 @@ export interface DiagnosisLock {
   acquired: boolean;
   key: string;
   token: string;
+  error?: string;
 }
 
 export interface CoordinationHealth {
@@ -121,9 +122,9 @@ export class PostgresCoordination implements CoordinationBackend {
       );
       return { acquired: Boolean(res.rows[0]?.acquired), key, token };
     } catch (err: any) {
-      // Fail open: a lock outage must not block diagnosis entirely.
+      // Fail closed: expensive AI diagnosis coordination must never assume lock ownership during outages.
       console.error(`[Coordination] diagnosis lock unavailable: ${err.message}`);
-      return { acquired: true, key, token };
+      return { acquired: false, key, token, error: err.message };
     }
   }
 

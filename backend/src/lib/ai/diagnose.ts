@@ -118,6 +118,7 @@ export const DiagnosisOutputSchema = z.object({
 export type DiagnosisOutput = z.infer<typeof DiagnosisOutputSchema>;
 
 export interface DiagnosisContext {
+  organizationId?: string;
   workflowName: string;
   jobName: string;
   stepName: string;
@@ -1044,6 +1045,7 @@ export async function synthesizeDiagnosis(
       let reservation: any;
       try {
         reservation = await budgetController.reserveBudget({
+          organizationId: params.organizationId,
           provider: 'anthropic',
           model,
         });
@@ -1107,6 +1109,7 @@ export async function synthesizeDiagnosis(
       let reservation: any;
       try {
         reservation = await budgetController.reserveBudget({
+          organizationId: params.organizationId,
           provider: 'openai',
           model,
         });

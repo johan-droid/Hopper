@@ -107,7 +107,11 @@ export async function reserveQuota(
   plan: PlanTier,
   currentRunsUsed = 0,
   billingUrl = 'https://hopper.dev/billing',
-  options?: { enforce?: boolean }
+  options?: {
+    enforce?: boolean;
+    githubRunId?: number;
+    claimEvent?: (key: string) => Promise<boolean>;
+  }
 ): Promise<QuotaCheckResult> {
   const isEnforced =
     options?.enforce ??
@@ -123,6 +127,39 @@ export async function reserveQuota(
       limit: limits.monthlyRuns,
       remainingRuns: 999999,
     };
+  }
+
+  // If already exhausted, block immediately
+  if (currentRunsUsed >= limits.monthlyRuns) {
+    let exhaustionNotice: string | undefined;
+    if (plan === 'free') {
+      exhaustionNotice = `⚠️ **Hopper Monthly Free Quota Reached (${limits.monthlyRuns}/${limits.monthlyRuns} builds diagnosed).** [Upgrade to Pro ($9/mo) for 250 runs + full flaky test history →](${billingUrl})`;
+    } else {
+      exhaustionNotice = `⚠️ **Hopper Plan Quota Reached (${limits.monthlyRuns}/${limits.monthlyRuns} runs).** [Upgrade plan to maintain automated CI diagnosis →](${billingUrl})`;
+    }
+    return {
+      allowed: false,
+      plan,
+      runsUsed: currentRunsUsed,
+      limit: limits.monthlyRuns,
+      remainingRuns: 0,
+      exhaustionNotice,
+    };
+  }
+
+  // Matrix Accounting: If multiple matrix jobs arrive for the same unique GitHub workflow run,
+  // bill only the first job of that run.
+  if (options?.githubRunId && typeof options.claimEvent === 'function') {
+    const isFirstJobInRun = await options.claimEvent(`quota:run:${orgId}:${options.githubRunId}`);
+    if (!isFirstJobInRun) {
+      return {
+        allowed: true,
+        plan,
+        runsUsed: currentRunsUsed,
+        limit: limits.monthlyRuns,
+        remainingRuns: Math.max(0, limits.monthlyRuns - currentRunsUsed),
+      };
+    }
   }
 
   if (typeof orgRepo?.tryReserveRunQuota === 'function') {
