@@ -131,6 +131,8 @@ export interface DiagnosisContext {
     computedFlakinessScore: number;
   };
   slicedLogSnippet: string;
+  commitDiffSnippet?: string;
+  workflowDefinition?: string | null;
 }
 
 export const systemPrompt = `You are a CI/CD failure diagnostic engine.
@@ -169,22 +171,27 @@ STRICT EVIDENCE RULES:
 export function buildDiagnosisUserPrompt(params: DiagnosisContext): string {
   const { wrappedLog } = sanitizeAndWrapCiLog(params.slicedLogSnippet);
 
-  return JSON.stringify(
-    {
-      context: {
-        workflow: params.workflowName,
-        job: params.jobName,
-        failed_step: params.stepName,
-        exit_code: params.exitCode,
-        commit_sha: params.commitSha.slice(0, 7),
-        modified_files_in_commit: params.modifiedFiles.slice(0, 25),
-      },
-      cross_run_history: params.historicalStats,
-      sanitized_log_window: wrappedLog,
+  const payload: Record<string, any> = {
+    context: {
+      workflow: params.workflowName,
+      job: params.jobName,
+      failed_step: params.stepName,
+      exit_code: params.exitCode,
+      commit_sha: params.commitSha.slice(0, 7),
+      modified_files_in_commit: params.modifiedFiles.slice(0, 25),
     },
-    null,
-    2
-  );
+    cross_run_history: params.historicalStats,
+    sanitized_log_window: wrappedLog,
+  };
+
+  if (params.commitDiffSnippet) {
+    payload.commit_diff_snippet = params.commitDiffSnippet.slice(0, 5000);
+  }
+  if (params.workflowDefinition) {
+    payload.workflow_definition = params.workflowDefinition.slice(0, 2500);
+  }
+
+  return JSON.stringify(payload, null, 2);
 }
 
 /**

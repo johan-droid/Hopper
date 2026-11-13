@@ -33,7 +33,7 @@ describe('Phase 13: End-to-End SaaS User Journeys (A through G)', () => {
   let signatureId: string;
 
   function createTestJwt(userId: string, email: string): string {
-    const secret = process.env.SUPABASE_JWT_SECRET || 'hopper-dev-secret-key-at-least-32-bytes-long-for-hmac-sha256';
+    const secret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET || 'hopper-dev-secret-key-at-least-32-bytes-long-for-hmac-sha256';
     const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
     const payload = Buffer.from(
       JSON.stringify({

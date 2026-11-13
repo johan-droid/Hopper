@@ -298,4 +298,26 @@ Process completed with exit code 1.
     expect(result.status).toBe('deferred');
     expect(result.reason).toContain('matrix job');
   });
+
+  it('coalesces identical matrix job to existing diagnostic report without duplicate LLM dispatch', async () => {
+    setCoordinationBackend({
+      acquireDiagnosisLock: async () => ({ acquired: false, key: 'held-complete', token: 'other' }),
+      getCoalescedDiagnosis: async () => 'rep-coalesced-123',
+      releaseDiagnosisLock: async () => undefined,
+    } as any);
+
+    const mockDeps = {
+      orgRepo: {
+        upsert: async () => ({ id: 'org-1', plan: 'pro_dev', runs_used_this_period: 0 }),
+      } as any,
+      repoRepo: {
+        upsert: async () => ({ id: 'repo-1', default_branch: 'main' }),
+      } as any,
+    };
+
+    const result = await processWorkflowJob(baseEvent, mockDeps);
+    expect(result.status).toBe('diagnosed');
+    expect(result.reportId).toBe('rep-coalesced-123');
+    expect(result.reason).toContain('Coalesced');
+  });
 });

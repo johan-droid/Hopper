@@ -29,7 +29,7 @@ import {
   DatabaseExecutor,
 } from '../db/index.js';
 import { CanonicalCIEvent, EngineDiagnosisResult } from './types.js';
-import { checkQuota } from '../lib/billing/quota-guard.js';
+import { checkQuota, reserveQuota } from '../lib/billing/quota-guard.js';
 import { DiagnosisOutputSchema } from '../lib/ai/diagnose.js';
 
 export * from './types.js';
@@ -137,19 +137,19 @@ export class HopperEngine {
     // =========================================================================
     // BRANCH B: Failure Diagnostic Pipeline (conclusion == 'failure')
     // =========================================================================
-    // 2. Check Quota Allowance
-    const quota = checkQuota(pipelineContext.org.plan, pipelineContext.org.runsUsed);
+    // 2. Atomic Quota Reservation (TOCTOU race defense across matrix bursts)
+    const quota = await reserveQuota(
+      this.orgRepo,
+      pipelineContext.org.id,
+      pipelineContext.org.plan,
+      pipelineContext.org.runsUsed
+    );
     if (!quota.allowed) {
       this.observability.warn(`Quota exceeded for organization ${pipelineContext.org.login}`, { correlationId });
       return {
         status: 'quota_exceeded',
         reason: quota.exhaustionNotice,
       };
-    }
-
-    // Record run usage in organization
-    if (typeof (this.orgRepo as any)?.incrementRunsUsed === 'function') {
-      await (this.orgRepo as any).incrementRunsUsed(pipelineContext.org.id);
     }
 
     // 3. Fetch Raw Log Stream (if not already present in event)
@@ -160,13 +160,34 @@ export class HopperEngine {
       providedLog: options?.rawLog || event.rawLog,
     });
 
-    // 4. Fetch Modified Files (if not provided)
+    // 4. Fetch Modified Files, Commit Diff & Workflow Definition (Context Grounding)
     const modifiedFiles = await this.integration.fetchModifiedFiles({
       installationId: event.installationId,
       repoFullName: event.repoFullName,
       commitSha: event.commitSha,
       providedFiles: options?.modifiedFiles || event.modifiedFiles,
     });
+
+    const [commitDiff, workflowDef] = await Promise.all([
+      this.integration.fetchCommitDiff({
+        installationId: event.installationId,
+        repoFullName: event.repoFullName,
+        commitSha: event.commitSha,
+      }),
+      this.integration.fetchWorkflowDefinition({
+        installationId: event.installationId,
+        repoFullName: event.repoFullName,
+        workflowPathOrName: event.workflowName,
+        ref: event.commitSha,
+      }),
+    ]);
+
+    pipelineContext.commitDiff = commitDiff;
+    pipelineContext.workflowDefinition = workflowDef;
+    pipelineContext.modifiedFiles = modifiedFiles;
+    pipelineContext.matchingCodeSnippets = commitDiff
+      ? this.context.extractMatchingCodeSnippets(commitDiff, modifiedFiles)
+      : [];
 
     // 5. Normalization: Slicing & Secret Scrubbing
     const evidence = this.normalization.normalizeLogOutput(rawLog);
@@ -299,6 +320,26 @@ export class HopperEngine {
 
     if (githubCommentId) {
       await this.diagnosticReportRepo.updateGithubCommentId(report.id, githubCommentId);
+    }
+
+    // 11. Create GitHub Check Run with inline line annotations
+    await this.integration.createCheckRun({
+      installationId: event.installationId,
+      repoFullName: event.repoFullName,
+      commitSha: event.commitSha,
+      diagnosis,
+      flakinessScore: intelligence.flakinessScore,
+    });
+
+    // 12. Automated Rerun for high-confidence flaky tests (>85%)
+    if (pipelineContext.org.autoRetryPolicy && intelligence.flakinessScore >= 85) {
+      await this.integration.triggerWorkflowRerun({
+        installationId: event.installationId,
+        repoFullName: event.repoFullName,
+        runId: event.githubRunId,
+        flakinessScore: intelligence.flakinessScore,
+        autoRetryPolicy: true,
+      });
     }
 
     return {

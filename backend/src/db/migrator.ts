@@ -17,10 +17,15 @@ export async function runMigrations(
   rootDir: string = process.cwd()
 ): Promise<MigrationResult> {
   const db = executor || getDatabaseExecutor();
-  const migrationsDir = path.join(rootDir, 'supabase', 'migrations');
+  let migrationsDir = path.join(rootDir, 'supabase', 'migrations');
 
   if (!fs.existsSync(migrationsDir)) {
-    throw new Error(`Migrations directory not found at: ${migrationsDir}`);
+    const backendMigrations = path.join(rootDir, 'backend', 'supabase', 'migrations');
+    if (fs.existsSync(backendMigrations)) {
+      migrationsDir = backendMigrations;
+    } else {
+      throw new Error(`Migrations directory not found at: ${migrationsDir}`);
+    }
   }
 
   const migrationFiles = fs

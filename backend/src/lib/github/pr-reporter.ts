@@ -170,3 +170,179 @@ export async function upsertPrStickyComment(
     };
   }
 }
+
+export interface CreateCheckRunOptions {
+  installationToken?: string;
+  repoFullName: string;
+  commitSha: string;
+  name?: string;
+  diagnosis: DiagnosisOutput;
+  flakinessScore: number;
+}
+
+export interface CheckRunResult {
+  checkRunId: number;
+  url?: string;
+}
+
+/**
+ * Creates or completes a GitHub Check Run with inline file annotations
+ * and actionable root-cause diagnoses directly in the GitHub PR Checks UI.
+ */
+export async function createGitHubCheckRun(
+  options: CreateCheckRunOptions
+): Promise<CheckRunResult> {
+  const {
+    installationToken,
+    repoFullName,
+    commitSha,
+    name = 'Hopper CI Diagnosis',
+    diagnosis,
+    flakinessScore,
+  } = options;
+
+  if (!installationToken || installationToken.startsWith('ghs_mock')) {
+    return { checkRunId: 999900001, url: `https://github.com/${repoFullName}/runs/mock` };
+  }
+
+  const baseUrl = `https://api.github.com/repos/${repoFullName}`;
+  const headers = {
+    Authorization: `Bearer ${installationToken}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'Hopper-CI-Doctor/1.0',
+    'Content-Type': 'application/json',
+  };
+
+  const annotations: Array<{
+    path: string;
+    start_line: number;
+    end_line: number;
+    annotation_level: 'notice' | 'warning' | 'failure';
+    message: string;
+    title: string;
+    raw_details?: string;
+  }> = [];
+
+  for (const line of diagnosis.relevant_log_lines.slice(0, 10)) {
+    const match = line.content.match(/([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+):(\d+)/);
+    const path = match ? match[1] : (diagnosis.likely_flaky_test.test_name || 'CI');
+    const lineNum = match ? parseInt(match[2], 10) : line.line_number;
+
+    annotations.push({
+      path,
+      start_line: lineNum,
+      end_line: lineNum,
+      annotation_level: flakinessScore >= 65 ? 'warning' : 'failure',
+      message: `${line.explanation} (Line: ${line.content.trim()})`,
+      title: `Hopper: ${diagnosis.error_category}`,
+      raw_details: diagnosis.suggested_next_check,
+    });
+  }
+
+  const payload = {
+    name,
+    head_sha: commitSha,
+    status: 'completed',
+    conclusion: flakinessScore >= 80 ? 'neutral' : 'action_required',
+    completed_at: new Date().toISOString(),
+    output: {
+      title: `CI Failure Diagnosis: ${diagnosis.error_category}`,
+      summary: `**Root Cause Clues:**\n${diagnosis.root_cause_clues}\n\n**Flaky Assessment (${flakinessScore}%):**\n${diagnosis.likely_flaky_test.reasoning}\n\n**Suggested Action:**\n${diagnosis.suggested_next_check}`,
+      annotations: annotations.slice(0, 50),
+    },
+  };
+
+  try {
+    const res = await fetch(`${baseUrl}/check-runs`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { id: number; html_url?: string };
+      return { checkRunId: data.id, url: data.html_url };
+    }
+  } catch (err: any) {
+    console.warn(`[PrReporter] Failed to create GitHub Check Run: ${err.message}`);
+  }
+
+  return { checkRunId: 999900001 };
+}
+
+export interface TriggerRerunOptions {
+  installationToken?: string;
+  repoFullName: string;
+  runId: number;
+  flakinessScore: number;
+  autoRetryPolicy?: boolean;
+}
+
+export interface TriggerRerunResult {
+  triggered: boolean;
+  reason: string;
+}
+
+/**
+ * Triggers an automated rerun of failed jobs for confirmed flaky tests (>85% score)
+ * when the tenant has enabled the auto_retry_policy.
+ */
+export async function triggerWorkflowRerun(
+  options: TriggerRerunOptions
+): Promise<TriggerRerunResult> {
+  const {
+    installationToken,
+    repoFullName,
+    runId,
+    flakinessScore,
+    autoRetryPolicy = false,
+  } = options;
+
+  if (!autoRetryPolicy) {
+    return {
+      triggered: false,
+      reason: 'Auto-retry policy is disabled for this organization/repository',
+    };
+  }
+
+  if (flakinessScore < 85) {
+    return {
+      triggered: false,
+      reason: `Flakiness score (${flakinessScore}%) is below the automated rerun threshold (85%)`,
+    };
+  }
+
+  if (!installationToken || installationToken.startsWith('ghs_mock')) {
+    return {
+      triggered: true,
+      reason: 'Mock rerun triggered successfully',
+    };
+  }
+
+  const url = `https://api.github.com/repos/${repoFullName}/actions/runs/${runId}/rerun-failed-jobs`;
+  const headers = {
+    Authorization: `Bearer ${installationToken}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'Hopper-CI-Doctor/1.0',
+  };
+
+  try {
+    const res = await fetch(url, { method: 'POST', headers });
+    if (res.status === 201 || res.status === 200) {
+      return {
+        triggered: true,
+        reason: `Successfully triggered rerun for flaky failure on run ${runId}`,
+      };
+    }
+    return {
+      triggered: false,
+      reason: `GitHub API returned ${res.status}: ${await res.text()}`,
+    };
+  } catch (err: any) {
+    return {
+      triggered: false,
+      reason: `Failed to trigger rerun: ${err.message}`,
+    };
+  }
+}

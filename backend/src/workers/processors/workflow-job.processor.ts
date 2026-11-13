@@ -17,7 +17,13 @@ import { WorkflowJobEventData, JobDiagnosticResult } from '../../queue/types.js'
 import { HopperEngine, CanonicalCIEvent, HopperEngineDependencies } from '../../engine/index.js';
 import { sliceFailedStepLog } from '../../lib/parser/log-slicer.js';
 import { computeFailureSignature } from '../../lib/parser/fingerprinter.js';
-import { acquireDiagnosisLock, releaseDiagnosisLock, DiagnosisLock } from '../../queue/coordination.js';
+import {
+  acquireDiagnosisLock,
+  releaseDiagnosisLock,
+  completeDiagnosisLock,
+  getCoalescedDiagnosis,
+  DiagnosisLock,
+} from '../../queue/coordination.js';
 import { RepositoryRepository } from '../../db/repositories/repository.repository.js';
 
 export interface ProcessorDependencies extends HopperEngineDependencies {}
@@ -59,8 +65,20 @@ export async function processWorkflowJob(
       // Offline / mocked executor fallback
     }
 
-    diagnosisLock = await acquireDiagnosisLock(repoId, signatureObj.signatureHash);
+    diagnosisLock = await acquireDiagnosisLock(
+      repoId,
+      `${jobData.commitSha}:${signatureObj.signatureHash}`
+    );
     if (!diagnosisLock.acquired) {
+      const coalescedReportId = await getCoalescedDiagnosis(diagnosisLock.key);
+      if (coalescedReportId) {
+        return {
+          status: 'diagnosed',
+          signatureHash: signatureObj.signatureHash,
+          reportId: coalescedReportId,
+          reason: 'Coalesced identical matrix burst failure to existing diagnostic report',
+        };
+      }
       return {
         status: 'deferred',
         reason: 'Another matrix job is diagnosing an identical failure signature',
@@ -101,6 +119,10 @@ export async function processWorkflowJob(
       modifiedFiles: jobData.modifiedFiles,
     });
 
+    if (result.status === 'diagnosed' && result.reportId && diagnosisLock) {
+      await completeDiagnosisLock(diagnosisLock.key, diagnosisLock.token, result.reportId);
+    }
+
     return {
       status: result.status as JobDiagnosticResult['status'],
       signatureHash: result.signatureHash,
@@ -112,7 +134,10 @@ export async function processWorkflowJob(
     };
   } finally {
     if (diagnosisLock) {
-      await releaseDiagnosisLock(diagnosisLock.key, diagnosisLock.token);
+      const coalesced = await getCoalescedDiagnosis(diagnosisLock.key);
+      if (!coalesced) {
+        await releaseDiagnosisLock(diagnosisLock.key, diagnosisLock.token);
+      }
     }
   }
 }

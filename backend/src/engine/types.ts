@@ -61,6 +61,7 @@ export interface PipelineContext {
     login: string;
     plan: PlanTier;
     runsUsed: number;
+    autoRetryPolicy?: boolean;
   };
   repo: {
     id: string;
@@ -70,6 +71,9 @@ export interface PipelineContext {
   };
   modifiedFiles: string[];
   priorCommitFailuresCount: number;
+  commitDiff?: string;
+  workflowDefinition?: string | null;
+  matchingCodeSnippets?: Array<{ file: string; line: number; snippet: string }>;
 }
 
 /**

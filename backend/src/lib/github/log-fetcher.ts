@@ -69,12 +69,87 @@ export interface FetchJobLogOptions {
 }
 
 /**
+ * Streams log bytes with an O(1) bounded head/tail ring buffer.
+ * Retains early environment setup context (head) and late failure traces (tail)
+ * while dropping intermediate repetitive logs to prevent V8 heap spikes and OOM.
+ */
+export async function streamLogWithHeadTailBuffer(
+  body: ReadableStream<Uint8Array>,
+  headBytes = 64 * 1024,
+  tailBytes = 256 * 1024
+): Promise<string> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder('utf-8');
+
+  const headBuf = new Uint8Array(headBytes);
+  let headWritten = 0;
+
+  const tailRing = new Uint8Array(tailBytes);
+  let tailRingStart = 0;
+  let tailRingLength = 0;
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done || !value) break;
+
+      totalBytes += value.byteLength;
+
+      // 1. Fill Head Buffer
+      if (headWritten < headBytes) {
+        const canTake = Math.min(value.byteLength, headBytes - headWritten);
+        headBuf.set(value.subarray(0, canTake), headWritten);
+        headWritten += canTake;
+      }
+
+      // 2. Rolling Tail Buffer
+      for (let i = 0; i < value.byteLength; i++) {
+        const byte = value[i];
+        if (tailRingLength < tailBytes) {
+          tailRing[tailRingLength++] = byte;
+        } else {
+          tailRing[tailRingStart] = byte;
+          tailRingStart = (tailRingStart + 1) % tailBytes;
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  // Linearize the tail buffer
+  const tailLinear = new Uint8Array(tailRingLength);
+  for (let i = 0; i < tailRingLength; i++) {
+    tailLinear[i] = tailRing[(tailRingStart + i) % tailBytes];
+  }
+
+  if (totalBytes <= headBytes + tailBytes) {
+    // Fits within head + tail, decode tail directly
+    const full = new Uint8Array(totalBytes);
+    const headPart = headBuf.subarray(0, Math.min(totalBytes, headWritten));
+    full.set(headPart, 0);
+    if (totalBytes > headWritten) {
+      const tailSlice = tailLinear.subarray(Math.max(0, tailLinear.length - (totalBytes - headWritten)));
+      full.set(tailSlice, headWritten);
+    }
+    return decoder.decode(full);
+  }
+
+  const headText = decoder.decode(headBuf.subarray(0, headWritten));
+  const tailText = decoder.decode(tailLinear);
+  const skippedBytes = totalBytes - (headWritten + tailRingLength);
+
+  return `${headText}\n\n... [TRUNCATED ${skippedBytes} BYTES OF INTERMEDIATE BUILD LOGS] ...\n\n${tailText}`;
+}
+
+/**
  * Streams the raw log text for a specific failing GitHub Actions job.
  * Automatically handles 302 redirects to signed cloud storage endpoints
- * and bounds buffer size to O(1) memory.
+ * and bounds buffer size to O(1) memory via stream truncation.
  */
 export async function fetchJobLogStream(options: FetchJobLogOptions): Promise<string> {
-  const maxBytes = options.maxBytes || 300_000;
+  const maxBytes = options.maxBytes || 320_000;
 
   // If token is absent or in mock mode, return synthetic real-world log
   if (!options.installationToken || options.installationToken.startsWith('ghs_mock')) {
@@ -98,12 +173,122 @@ export async function fetchJobLogStream(options: FetchJobLogOptions): Promise<st
       return SAMPLE_RAW_LOGS.jest_assertion_fail;
     }
 
+    // Stream-truncate if readable stream is available
+    if (response.body && typeof response.body.getReader === 'function') {
+      const headLimit = Math.min(64 * 1024, Math.floor(maxBytes * 0.2));
+      const tailLimit = maxBytes - headLimit;
+      return await streamLogWithHeadTailBuffer(response.body, headLimit, tailLimit);
+    }
+
     const fullLog = await response.text();
-    // Bound to tail window
     return fullLog.length > maxBytes ? fullLog.slice(-maxBytes) : fullLog;
   } catch (err: any) {
     console.warn(`[LogFetcher] Network failure while streaming log: ${err.message}. Using fallback.`);
     return SAMPLE_RAW_LOGS.jest_assertion_fail;
+  }
+}
+
+export interface FetchCommitDiffOptions {
+  installationToken?: string;
+  repoFullName: string;
+  commitSha: string;
+  maxBytes?: number;
+}
+
+/**
+ * Fetches the raw unified git diff for a commit to correlate code changes
+ * with failure stack traces.
+ */
+export async function fetchCommitDiff(options: FetchCommitDiffOptions): Promise<string> {
+  const maxBytes = options.maxBytes || 50_000;
+
+  if (!options.installationToken || options.installationToken.startsWith('ghs_mock')) {
+    return `diff --git a/src/auth/jwt-verifier.ts b/src/auth/jwt-verifier.ts
+index 10a2b3c..45d6e7f 100644
+--- a/src/auth/jwt-verifier.ts
++++ b/src/auth/jwt-verifier.ts
+@@ -82,6 +82,7 @@ export function verifyToken(token: string) {
+-  return { status: 'revoked', error: 'Token revoked' };
++  return { status: 'active' };
+ }`;
+  }
+
+  try {
+    const url = `https://api.github.com/repos/${options.repoFullName}/commits/${options.commitSha}`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${options.installationToken}`,
+        Accept: 'application/vnd.github.v3.diff',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'Hopper-CI-Doctor/1.0',
+      },
+    });
+
+    if (!response.ok) {
+      return '';
+    }
+
+    const diffText = await response.text();
+    return diffText.length > maxBytes ? diffText.slice(0, maxBytes) + '\n\n... [DIFF TRUNCATED]' : diffText;
+  } catch {
+    return '';
+  }
+}
+
+export interface FetchWorkflowOptions {
+  installationToken?: string;
+  repoFullName: string;
+  workflowPathOrName: string;
+  ref?: string;
+}
+
+/**
+ * Fetches the workflow YAML file definition from the repository to ground
+ * environment and build step diagnoses.
+ */
+export async function fetchWorkflowDefinition(options: FetchWorkflowOptions): Promise<string | null> {
+  if (!options.installationToken || options.installationToken.startsWith('ghs_mock')) {
+    return `name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+      - run: pnpm test`;
+  }
+
+  try {
+    // Normalize workflow path
+    let path = options.workflowPathOrName;
+    if (!path.startsWith('.github/workflows/')) {
+      if (path.endsWith('.yml') || path.endsWith('.yaml')) {
+        path = `.github/workflows/${path}`;
+      } else {
+        path = `.github/workflows/${path}.yml`;
+      }
+    }
+
+    const refQuery = options.ref ? `?ref=${encodeURIComponent(options.ref)}` : '';
+    const url = `https://api.github.com/repos/${options.repoFullName}/contents/${path}${refQuery}`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${options.installationToken}`,
+        Accept: 'application/vnd.github.raw+yaml',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'Hopper-CI-Doctor/1.0',
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const content = await response.text();
+    return content.slice(0, 20_000);
+  } catch {
+    return null;
   }
 }
 

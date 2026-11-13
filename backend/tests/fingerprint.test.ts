@@ -17,4 +17,20 @@ describe('Failure Fingerprinter & Normalizer (Cloud Moat)', () => {
     const sig = computeFailureSignature('job', 'step', 'test', 'Error: connection timed out');
     expect(sig.signatureHash).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  it('should extract top normalized stack frames and compute structural frame hash', () => {
+    const logWithStack = `
+      Error: assertion error
+        at verifyToken (/app/src/auth/jwt.ts:42:15)
+        at runAuth (/app/src/auth/runner.ts:10:5)
+    `;
+    const sig = computeFailureSignature('test', 'run', 'auth.spec.ts', logWithStack, {
+      category: 'test_assertion',
+      exitCode: 1,
+    });
+
+    expect(sig.topFrames).toEqual(['jwt.ts#verifyToken', 'runner.ts#runAuth']);
+    expect(sig.structuralHash).toBeDefined();
+    expect(sig.structuralHash).toMatch(/^[0-9a-f]{64}$/);
+  });
 });

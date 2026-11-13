@@ -53,4 +53,30 @@ describe('Flakiness Engine', () => {
     });
     expect(maxScore).toBeLessThanOrEqual(99);
   });
+
+  it('should suppress flakiness score for developer-induced PR branch code breakage', () => {
+    const score = calculateFlakinessScore({
+      sameShaRetryPasses: 0,
+      uniquePrsAffected: 1,
+      totalOccurrences: 5,
+      mainBranchOccurrences: 0,
+      branchClass: 'pr_branch',
+      hasCodeChangeIntersection: true,
+      cleanedSnippet: 'AssertionError in auth.spec.ts: expected true to equal false',
+    });
+    expect(score).toBeLessThanOrEqual(15);
+  });
+
+  it('should boost flakiness score when default branch fails without code intersection', () => {
+    const score = calculateFlakinessScore({
+      sameShaRetryPasses: 0,
+      uniquePrsAffected: 1,
+      totalOccurrences: 2,
+      mainBranchOccurrences: 2,
+      branchClass: 'default_branch',
+      hasCodeChangeIntersection: false,
+      cleanedSnippet: 'ETIMEDOUT: Connection reset by peer',
+    });
+    expect(score).toBeGreaterThanOrEqual(55);
+  });
 });

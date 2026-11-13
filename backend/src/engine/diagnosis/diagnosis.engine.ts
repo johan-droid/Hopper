@@ -48,6 +48,8 @@ export class DiagnosisEngine {
         computedFlakinessScore: params.flakinessScore,
       },
       slicedLogSnippet: params.evidence.cleanedSnippet,
+      commitDiffSnippet: params.context.commitDiff,
+      workflowDefinition: params.context.workflowDefinition,
     };
 
     // Invoke the single configured AI provider (with automatic deterministic fallback on failure)

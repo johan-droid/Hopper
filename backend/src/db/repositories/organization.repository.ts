@@ -118,6 +118,45 @@ export class OrganizationRepository {
     return res.rows[0];
   }
 
+  /**
+   * Atomic TOCTOU-safe run quota reservation.
+   * Atomically increments runs_used_this_period IF AND ONLY IF current runs < limit.
+   */
+  async tryReserveRunQuota(
+    orgId: string,
+    limit: number
+  ): Promise<{ allowed: boolean; runsUsed: number }> {
+    const sql = `
+      UPDATE organizations
+      SET runs_used_this_period = runs_used_this_period + 1, updated_at = NOW()
+      WHERE id = $1 AND runs_used_this_period < $2
+      RETURNING runs_used_this_period;
+    `;
+    const res = await this.db.query<{ runs_used_this_period: number }>(sql, [orgId, limit]);
+    if (res.rows.length > 0) {
+      return { allowed: true, runsUsed: Number(res.rows[0].runs_used_this_period) };
+    }
+
+    // Query current count if not updated (either cap reached or missing org)
+    const org = await this.findById(orgId);
+    return {
+      allowed: false,
+      runsUsed: org ? Number(org.runs_used_this_period) : limit,
+    };
+  }
+
+  /**
+   * Releases an unused quota reservation if an event was skipped or aborted before diagnosis.
+   */
+  async releaseRunQuota(orgId: string): Promise<void> {
+    const sql = `
+      UPDATE organizations
+      SET runs_used_this_period = GREATEST(0, runs_used_this_period - 1), updated_at = NOW()
+      WHERE id = $1;
+    `;
+    await this.db.query(sql, [orgId]);
+  }
+
   async incrementRunsUsed(orgId: string): Promise<Organization> {
     const sql = 'UPDATE organizations SET runs_used_this_period = runs_used_this_period + 1, updated_at = NOW() WHERE id = $1 RETURNING *';
     const res = await this.db.query<Organization>(sql, [orgId]);

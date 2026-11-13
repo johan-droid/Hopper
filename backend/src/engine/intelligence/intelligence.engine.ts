@@ -30,13 +30,28 @@ export class IntelligenceEngine {
   }): Promise<{ intelligence: FailureIntelligence; signatureRecord: any }> {
     const { repoId, jobName, stepName, evidence, isMainBranch, modifiedFiles } = params;
 
-    // 1. Compute Deterministic SHA-256 Fingerprint
+    // 1. Compute Deterministic Two-Tier SHA-256 Fingerprint
     const signatureObj = computeFailureSignature(
       jobName,
       stepName,
       evidence.detectedTestIdentifier,
-      evidence.cleanedSnippet
+      evidence.cleanedSnippet,
+      {
+        exitCode: evidence.detectedExitCode,
+        category: 'test_assertion',
+      }
     );
+
+    // Compute code intersection with modified files
+    const testId = (evidence.detectedTestIdentifier || '').toLowerCase();
+    const hasCodeChangeIntersection = modifiedFiles.some((f) => {
+      const lowerFile = f.toLowerCase();
+      return (
+        (testId && (testId.includes(lowerFile) || lowerFile.includes(testId))) ||
+        evidence.cleanedSnippet.toLowerCase().includes(lowerFile)
+      );
+    });
+    const branchClass: 'default_branch' | 'pr_branch' = isMainBranch ? 'default_branch' : 'pr_branch';
 
     // 2. Lookup existing signature in repository scope
     const existingSig = await this.failureSigRepo.findByHash(repoId, signatureObj.signatureHash);
@@ -53,6 +68,8 @@ export class IntelligenceEngine {
         totalOccurrences: signatureRecord.total_occurrences,
         mainBranchOccurrences: signatureRecord.main_branch_occurrences,
         cleanedSnippet: evidence.cleanedSnippet,
+        branchClass,
+        hasCodeChangeIntersection,
       });
 
       await this.failureSigRepo.updateFlakinessAndCache({
@@ -67,6 +84,8 @@ export class IntelligenceEngine {
         totalOccurrences: 1,
         mainBranchOccurrences: isMainBranch ? 1 : 0,
         cleanedSnippet: evidence.cleanedSnippet,
+        branchClass,
+        hasCodeChangeIntersection,
       });
 
       const embedding = await generateEmbedding(signatureObj.normalizedTemplate);

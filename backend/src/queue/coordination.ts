@@ -43,6 +43,8 @@ export interface CoordinationBackend {
     fingerprintHash: string,
     ttlSeconds?: number
   ): Promise<DiagnosisLock>;
+  completeDiagnosisLock(key: string, token: string, reportId: string): Promise<boolean>;
+  getCoalescedDiagnosis(key: string): Promise<string | null>;
   releaseDiagnosisLock(key: string, token: string): Promise<void>;
   claimProcessedEvent(eventKey: string): Promise<boolean>;
   releaseProcessedEvent(eventKey: string): Promise<void>;
@@ -125,6 +127,34 @@ export class PostgresCoordination implements CoordinationBackend {
     }
   }
 
+  async completeDiagnosisLock(key: string, token: string, reportId: string): Promise<boolean> {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reportId);
+    if (!isUuid) return false;
+    try {
+      const res = await this.db.query<{ completed: boolean }>(
+        `SELECT hopper_complete_diagnosis_lock($1, $2, $3::uuid) AS completed`,
+        [key, token, reportId]
+      );
+      return Boolean(res.rows[0]?.completed);
+    } catch (err: any) {
+      console.warn(`[Coordination] failed to complete diagnosis lock: ${err.message}`);
+      return false;
+    }
+  }
+
+  async getCoalescedDiagnosis(key: string): Promise<string | null> {
+    try {
+      const res = await this.db.query<{ report_id: string }>(
+        `SELECT hopper_get_coalesced_diagnosis($1) AS report_id`,
+        [key]
+      );
+      return res.rows[0]?.report_id || null;
+    } catch (err: any) {
+      console.warn(`[Coordination] failed to get coalesced diagnosis: ${err.message}`);
+      return null;
+    }
+  }
+
   async releaseDiagnosisLock(key: string, token: string): Promise<void> {
     try {
       await this.db.query(`SELECT hopper_release_diagnosis_lock($1, $2)`, [key, token]);
@@ -178,7 +208,7 @@ export class InMemoryCoordination implements CoordinationBackend {
 
   private deliveries = new Map<string, number>();
   private rateWindows = new Map<string, { windowStart: number; count: number }>();
-  private locks = new Map<string, { token: string; expiresAt: number }>();
+  private locks = new Map<string, { token: string; expiresAt: number; reportId?: string }>();
   private processed = new Set<string>();
 
   async checkTenantRateLimit(
@@ -229,6 +259,24 @@ export class InMemoryCoordination implements CoordinationBackend {
 
     this.locks.set(key, { token, expiresAt: now + ttlSeconds * 1000 });
     return { acquired: true, key, token };
+  }
+
+  async completeDiagnosisLock(key: string, token: string, reportId: string): Promise<boolean> {
+    const existing = this.locks.get(key);
+    if (existing && existing.token === token) {
+      existing.reportId = reportId;
+      existing.expiresAt = Date.now() + 5 * 60 * 1000;
+      return true;
+    }
+    return false;
+  }
+
+  async getCoalescedDiagnosis(key: string): Promise<string | null> {
+    const existing = this.locks.get(key);
+    if (existing && existing.reportId && existing.expiresAt > Date.now()) {
+      return existing.reportId;
+    }
+    return null;
   }
 
   async releaseDiagnosisLock(key: string, token: string): Promise<void> {
@@ -326,6 +374,26 @@ export function acquireDiagnosisLock(
   ttlSeconds?: number
 ): Promise<DiagnosisLock> {
   return getCoordination().acquireDiagnosisLock(repoId, fingerprintHash, ttlSeconds);
+}
+
+export function completeDiagnosisLock(
+  key: string,
+  token: string,
+  reportId: string
+): Promise<boolean> {
+  const backend = getCoordination();
+  if (typeof backend?.completeDiagnosisLock === 'function') {
+    return backend.completeDiagnosisLock(key, token, reportId);
+  }
+  return Promise.resolve(false);
+}
+
+export function getCoalescedDiagnosis(key: string): Promise<string | null> {
+  const backend = getCoordination();
+  if (typeof backend?.getCoalescedDiagnosis === 'function') {
+    return backend.getCoalescedDiagnosis(key);
+  }
+  return Promise.resolve(null);
 }
 
 export function releaseDiagnosisLock(key: string, token: string): Promise<void> {

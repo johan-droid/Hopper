@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { renderGitHubPrComment, STICKY_COMMENT_MARKER } from '../src/lib/github/pr-reporter.js';
+import {
+  renderGitHubPrComment,
+  STICKY_COMMENT_MARKER,
+  createGitHubCheckRun,
+  triggerWorkflowRerun,
+} from '../src/lib/github/pr-reporter.js';
 import { DiagnosisOutputSchema } from '../src/lib/ai/diagnose.js';
 
 describe('Sticky PR Comment Reporter', () => {
@@ -60,5 +65,53 @@ describe('Sticky PR Comment Reporter', () => {
 
     expect(comment).toContain('🔒 **Cross-Run Pattern Detected:** This exact error signature has failed **12 times**');
     expect(comment).toContain('Unlock 30-day failure history, flaky test matrices & Slack alerts ($9/mo)');
+  });
+
+  it('should generate GitHub Check Run with inline annotations in mock mode', async () => {
+    const res = await createGitHubCheckRun({
+      installationToken: 'ghs_mock_token',
+      repoFullName: 'acme/repo',
+      commitSha: 'a1b2c3d4e5f6',
+      diagnosis: mockDiagnosis,
+      flakinessScore: 85,
+    });
+
+    expect(res.checkRunId).toBe(999900001);
+    expect(res.url).toContain('https://github.com/acme/repo/runs/mock');
+  });
+
+  it('should trigger workflow rerun only when auto_retry_policy is active and flakiness >= 85%', async () => {
+    // 1. Policy disabled
+    const disabled = await triggerWorkflowRerun({
+      installationToken: 'ghs_mock_token',
+      repoFullName: 'acme/repo',
+      runId: 12345,
+      flakinessScore: 90,
+      autoRetryPolicy: false,
+    });
+    expect(disabled.triggered).toBe(false);
+    expect(disabled.reason).toContain('Auto-retry policy is disabled');
+
+    // 2. Score below threshold
+    const lowScore = await triggerWorkflowRerun({
+      installationToken: 'ghs_mock_token',
+      repoFullName: 'acme/repo',
+      runId: 12345,
+      flakinessScore: 70,
+      autoRetryPolicy: true,
+    });
+    expect(lowScore.triggered).toBe(false);
+    expect(lowScore.reason).toContain('below the automated rerun threshold');
+
+    // 3. High flakiness with policy enabled
+    const triggered = await triggerWorkflowRerun({
+      installationToken: 'ghs_mock_token',
+      repoFullName: 'acme/repo',
+      runId: 12345,
+      flakinessScore: 88,
+      autoRetryPolicy: true,
+    });
+    expect(triggered.triggered).toBe(true);
+    expect(triggered.reason).toContain('Mock rerun triggered successfully');
   });
 });

@@ -24,7 +24,8 @@ export class ContextEngine {
    */
   async resolvePipelineContext(
     event: CanonicalCIEvent,
-    modifiedFiles: string[] = []
+    modifiedFiles: string[] = [],
+    extraContext?: { commitDiff?: string; workflowDefinition?: string | null }
   ): Promise<PipelineContext> {
     // 1. Ensure Tenant Organization Exists
     const org = await this.orgRepo.upsert({
@@ -52,6 +53,11 @@ export class ContextEngine {
     }
 
     const isMainBranch = event.branch === (repo?.default_branch || 'main');
+    const resolvedModifiedFiles = event.modifiedFiles || modifiedFiles;
+    const commitDiff = extraContext?.commitDiff;
+    const matchingCodeSnippets = commitDiff
+      ? this.extractMatchingCodeSnippets(commitDiff, resolvedModifiedFiles)
+      : [];
 
     return {
       org: {
@@ -59,6 +65,7 @@ export class ContextEngine {
         login: org.github_account_login,
         plan: org.plan,
         runsUsed: org.runs_used_this_period,
+        autoRetryPolicy: Boolean(org.auto_retry_policy),
       },
       repo: {
         id: repo.id,
@@ -66,9 +73,41 @@ export class ContextEngine {
         defaultBranch: repo.default_branch,
         isMainBranch,
       },
-      modifiedFiles: event.modifiedFiles || modifiedFiles,
+      modifiedFiles: resolvedModifiedFiles,
       priorCommitFailuresCount: priorFailures.length,
+      commitDiff,
+      workflowDefinition: extraContext?.workflowDefinition,
+      matchingCodeSnippets,
     };
+  }
+
+  /**
+   * Extracts diff hunks for files modified in the commit that correlate with failure reports.
+   */
+  extractMatchingCodeSnippets(
+    diff: string,
+    targetFiles: string[]
+  ): Array<{ file: string; line: number; snippet: string }> {
+    if (!diff || targetFiles.length === 0) return [];
+    const snippets: Array<{ file: string; line: number; snippet: string }> = [];
+    const fileBlocks = diff.split('diff --git ');
+
+    for (const block of fileBlocks) {
+      if (!block.trim()) continue;
+      const firstLine = block.split('\n')[0] || '';
+      const matchingFile = targetFiles.find((f) => firstLine.includes(f));
+      if (matchingFile) {
+        const hunkMatch = block.match(/@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
+        const startLine = hunkMatch ? parseInt(hunkMatch[1], 10) : 1;
+        const diffLines = block.split('\n').slice(1, 30).join('\n');
+        snippets.push({
+          file: matchingFile,
+          line: startLine,
+          snippet: diffLines.slice(0, 1500),
+        });
+      }
+    }
+    return snippets.slice(0, 5);
   }
 }
 

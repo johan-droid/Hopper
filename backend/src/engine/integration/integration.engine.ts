@@ -9,8 +9,21 @@
  */
 
 import { getInstallationToken } from '../../lib/github/app-auth.js';
-import { fetchJobLogStream, fetchCommitModifiedFiles, SAMPLE_RAW_LOGS } from '../../lib/github/log-fetcher.js';
-import { renderGitHubPrComment, upsertPrStickyComment } from '../../lib/github/pr-reporter.js';
+import {
+  fetchJobLogStream,
+  fetchCommitModifiedFiles,
+  fetchCommitDiff,
+  fetchWorkflowDefinition,
+  SAMPLE_RAW_LOGS,
+} from '../../lib/github/log-fetcher.js';
+import {
+  renderGitHubPrComment,
+  upsertPrStickyComment,
+  createGitHubCheckRun,
+  triggerWorkflowRerun,
+  CheckRunResult,
+  TriggerRerunResult,
+} from '../../lib/github/pr-reporter.js';
 import { DiagnosisOutput } from '../../lib/ai/diagnose.js';
 import { PlanTier } from '../../lib/billing/quota-guard.js';
 
@@ -63,6 +76,49 @@ export class IntegrationEngine {
       });
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * Retrieves the raw unified git diff for the commit to correlate code changes
+   * with failure stack traces.
+   */
+  async fetchCommitDiff(params: {
+    installationId: number;
+    repoFullName: string;
+    commitSha: string;
+  }): Promise<string> {
+    try {
+      const token = await getInstallationToken(params.installationId);
+      return await fetchCommitDiff({
+        installationToken: token,
+        repoFullName: params.repoFullName,
+        commitSha: params.commitSha,
+      });
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Retrieves the workflow YAML definition from the repository.
+   */
+  async fetchWorkflowDefinition(params: {
+    installationId: number;
+    repoFullName: string;
+    workflowPathOrName: string;
+    ref?: string;
+  }): Promise<string | null> {
+    try {
+      const token = await getInstallationToken(params.installationId);
+      return await fetchWorkflowDefinition({
+        installationToken: token,
+        repoFullName: params.repoFullName,
+        workflowPathOrName: params.workflowPathOrName,
+        ref: params.ref,
+      });
+    } catch {
+      return null;
     }
   }
 
@@ -121,6 +177,56 @@ export class IntegrationEngine {
     }
 
     return { commentText, githubCommentId };
+  }
+
+  /**
+   * Publishes inline annotations and status to GitHub Checks API.
+   */
+  async createCheckRun(params: {
+    installationId: number;
+    repoFullName: string;
+    commitSha: string;
+    name?: string;
+    diagnosis: DiagnosisOutput;
+    flakinessScore: number;
+  }): Promise<CheckRunResult> {
+    try {
+      const token = await getInstallationToken(params.installationId);
+      return await createGitHubCheckRun({
+        installationToken: token,
+        repoFullName: params.repoFullName,
+        commitSha: params.commitSha,
+        name: params.name,
+        diagnosis: params.diagnosis,
+        flakinessScore: params.flakinessScore,
+      });
+    } catch {
+      return { checkRunId: 999900001 };
+    }
+  }
+
+  /**
+   * Automatically re-runs failed jobs for confirmed flaky tests (>85%) when policy is enabled.
+   */
+  async triggerWorkflowRerun(params: {
+    installationId: number;
+    repoFullName: string;
+    runId: number;
+    flakinessScore: number;
+    autoRetryPolicy?: boolean;
+  }): Promise<TriggerRerunResult> {
+    try {
+      const token = await getInstallationToken(params.installationId);
+      return await triggerWorkflowRerun({
+        installationToken: token,
+        repoFullName: params.repoFullName,
+        runId: params.runId,
+        flakinessScore: params.flakinessScore,
+        autoRetryPolicy: params.autoRetryPolicy,
+      });
+    } catch (err: any) {
+      return { triggered: false, reason: err.message };
+    }
   }
 }
 
