@@ -101,10 +101,11 @@ export class GitHubSyncService {
     }> = [];
 
     const isMock =
-      !githubToken ||
-      githubToken.includes('mock') ||
-      process.env.AI_PROVIDER === 'mock' ||
-      process.env.NODE_ENV === 'test';
+      process.env.NODE_ENV !== 'production' &&
+      (!githubToken ||
+        githubToken.includes('mock') ||
+        process.env.AI_PROVIDER === 'mock' ||
+        process.env.NODE_ENV === 'test');
 
     if (!isMock && githubToken) {
       try {

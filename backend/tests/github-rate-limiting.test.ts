@@ -477,9 +477,10 @@ describe('GitHub Integration, Distributed Rate Limiting & Lifecycle Hardening', 
       const oldEnv = process.env.NODE_ENV;
       process.env.NODE_ENV = 'production';
 
+      const testWsId = '00000000-0000-4000-8000-000000000001';
       const mockWorkspaceRepo = {
-        listByUserId: async () => [{ id: 'ws-mock-uuid' }],
-        create: async () => ({ id: 'ws-mock-uuid' }),
+        listByUserId: async () => [{ id: testWsId }],
+        create: async () => ({ id: testWsId }),
       } as any;
       const mockProfileRepo = {
         updateCurrentWorkspace: async () => {},
@@ -504,7 +505,7 @@ describe('GitHub Integration, Distributed Rate Limiting & Lifecycle Hardening', 
               htmlUrl: 'https://github.com/octocat',
             },
             userProfileId: 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d',
-            workspaceId: 'ws-mock-uuid',
+            workspaceId: testWsId,
           })
         ).rejects.toThrow(/Production repository sync failed/);
       } finally {
