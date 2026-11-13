@@ -8,11 +8,11 @@
  *
  * Delivery model (GitHub):
  *   1. Validate signature and deduplicate the delivery.
- *   2. Durably enqueue the job in PostgreSQL (idempotent on job + attempt).
- *   3. Publish to Vercel Queues for immediate push delivery.
- *   4. Only acknowledge once (2) succeeded. If the queue publish failed for an
- *      unexpected reason, process a bounded batch inline; if that also fails,
- *      return 503 so GitHub retries instead of us silently dropping the event.
+ *   2. Process installation and repository lifecycle events.
+ *   3. Validate complete identity chain without fabricated identifiers in production.
+ *   4. Durably enqueue the job in PostgreSQL (idempotent on job + attempt).
+ *   5. Publish to Vercel Queues for immediate push delivery.
+ *   6. Only acknowledge once durably persisted.
  */
 
 import { Router, Request, Response } from 'express';
@@ -25,9 +25,18 @@ import { checkTenantRateLimit, claimWebhookDelivery } from '../../queue/coordina
 import { enqueueWorkflowJob } from '../../queue/ci-queue.js';
 import { WorkflowJobEventData } from '../../queue/types.js';
 import { processWorkflowJob } from '../../workers/processors/workflow-job.processor.js';
+import { GitHubSyncService } from '../../lib/github/sync-service.js';
+import { OrganizationRepository } from '../../db/repositories/organization.repository.js';
 
-export function createWebhooksRouter(): Router {
+export interface WebhookRouterDependencies {
+  syncService?: GitHubSyncService;
+  orgRepo?: OrganizationRepository;
+}
+
+export function createWebhooksRouter(deps: WebhookRouterDependencies = {}): Router {
   const router = Router();
+  const syncService = deps.syncService || new GitHubSyncService();
+  const orgRepo = deps.orgRepo || new OrganizationRepository();
 
   // ---------------------------------------------------------------------------
   // 1. GitHub Webhook Ingress
@@ -70,6 +79,52 @@ export function createWebhooksRouter(): Router {
 
     const payload = req.body;
 
+    // -------------------------------------------------------------------------
+    // A. Lifecycle Webhook Events: Installation & Repositories
+    // -------------------------------------------------------------------------
+    if (eventName === 'installation') {
+      const action = payload.action;
+      try {
+        if (action === 'created') {
+          await syncService.handleInstallationCreated(payload, req.ip);
+          return res.status(200).json({ status: 'processed', event: 'installation', action });
+        } else if (action === 'deleted') {
+          await syncService.handleInstallationDeleted(payload, req.ip);
+          return res.status(200).json({ status: 'processed', event: 'installation', action });
+        } else if (action === 'suspend') {
+          await syncService.handleInstallationSuspended(payload, req.ip);
+          return res.status(200).json({ status: 'processed', event: 'installation', action });
+        } else if (action === 'unsuspend') {
+          await syncService.handleInstallationUnsuspended(payload, req.ip);
+          return res.status(200).json({ status: 'processed', event: 'installation', action });
+        }
+        return res.status(200).json({ status: 'ignored', reason: `Unhandled installation action: ${action}` });
+      } catch (err: any) {
+        console.error(`[GitHub] Error processing installation.${action}: ${err.message}`);
+        return res.status(500).json({ error: 'Failed to process installation lifecycle event' });
+      }
+    }
+
+    if (eventName === 'installation_repositories') {
+      const action = payload.action;
+      try {
+        if (action === 'added') {
+          await syncService.handleRepositoriesAdded(payload, req.ip);
+          return res.status(200).json({ status: 'processed', event: 'installation_repositories', action });
+        } else if (action === 'removed') {
+          await syncService.handleRepositoriesRemoved(payload, req.ip);
+          return res.status(200).json({ status: 'processed', event: 'installation_repositories', action });
+        }
+        return res.status(200).json({ status: 'ignored', reason: `Unhandled installation_repositories action: ${action}` });
+      } catch (err: any) {
+        console.error(`[GitHub] Error processing installation_repositories.${action}: ${err.message}`);
+        return res.status(500).json({ error: 'Failed to process installation_repositories event' });
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // B. CI Workflow Execution Events (workflow_job, workflow_run)
+    // -------------------------------------------------------------------------
     const isJobCompleted = eventName === 'workflow_job' && payload?.action === 'completed';
     const isRunCompleted = eventName === 'workflow_run' && payload?.action === 'completed';
 
@@ -87,8 +142,44 @@ export function createWebhooksRouter(): Router {
       return res.status(200).json({ status: 'ignored', reason: `Ignored conclusion: ${conclusion}` });
     }
 
-    const orgLogin =
-      payload.organization?.login || payload.repository?.owner?.login || 'default-org';
+    // Strict Identity Extraction
+    const isProduction = process.env.NODE_ENV === 'production' || req.headers['x-strict-identity'] === 'true';
+    const installationId = payload.installation?.id || payload.organization?.id;
+    const orgLogin = payload.organization?.login || payload.repository?.owner?.login || (isProduction ? '' : 'default-org');
+    const repoFullName = payload.repository?.full_name;
+    const githubRepoId = payload.repository?.id;
+    const commitSha = payload.workflow_job?.head_sha || payload.workflow_run?.head_sha;
+    const githubRunId = payload.workflow_run?.id || payload.workflow_job?.run_id;
+    const githubJobId = payload.workflow_job?.id || payload.workflow_run?.id;
+
+    // In strict/production mode, strictly require authentic identity parameters without fallback fabrication
+    if (isProduction && (!installationId || !orgLogin || !repoFullName || !commitSha)) {
+      return res.status(422).json({
+        error: 'Unprocessable Entity',
+        message: 'Missing required GitHub identity fields (installation.id, organization.login, repository.full_name, commit_sha)',
+      });
+    }
+
+    // Check if installation is suspended or deleted
+    if (installationId) {
+      try {
+        const org = await orgRepo.findByGithubInstallationId(installationId);
+        if (org && org.installation_status === 'suspended') {
+          return res.status(200).json({
+            status: 'ignored',
+            reason: 'Organization installation is suspended',
+          });
+        }
+        if (org && org.installation_status === 'deleted') {
+          return res.status(200).json({
+            status: 'ignored',
+            reason: 'Organization installation has been uninstalled/deleted',
+          });
+        }
+      } catch {
+        // Fall through if DB check is not available
+      }
+    }
 
     const rateCheck = await checkTenantRateLimit(orgLogin, 120, 60);
     if (!rateCheck.allowed) {
@@ -99,23 +190,20 @@ export function createWebhooksRouter(): Router {
     }
 
     const eventData: WorkflowJobEventData = {
-      installationId: payload.installation?.id || payload.organization?.id || 1010101,
+      installationId: installationId || (isProduction ? 0 : 1010101),
       orgLogin,
       accountType: payload.organization ? 'Organization' : 'User',
-      repoFullName: payload.repository?.full_name || 'acme-corp/service',
-      githubRepoId: payload.repository?.id || 1000,
+      repoFullName: repoFullName || `${orgLogin}/repo`,
+      githubRepoId: githubRepoId || (isProduction ? 0 : 1000),
       workflowName: payload.workflow_run?.name || payload.workflow_job?.workflow_name || 'CI',
       jobName: payload.workflow_job?.name || payload.workflow_run?.name || 'test / build',
       stepName:
         payload.workflow_job?.steps?.find((s: any) => s.conclusion === 'failure')?.name ||
         'Execute Test Suite',
-      githubRunId: payload.workflow_run?.id || payload.workflow_job?.run_id || 12345,
-      githubJobId: payload.workflow_job?.id || payload.workflow_run?.id || 67890,
+      githubRunId: githubRunId || (isProduction ? 0 : 12345),
+      githubJobId: githubJobId || (isProduction ? 0 : 67890),
       githubRunAttempt: payload.workflow_run?.run_attempt || payload.workflow_job?.run_attempt || 1,
-      commitSha:
-        payload.workflow_job?.head_sha ||
-        payload.workflow_run?.head_sha ||
-        '0000000000000000000000000000000000000000',
+      commitSha: commitSha || (isProduction ? '' : '0000000000000000000000000000000000000000'),
       branch: payload.workflow_run?.head_branch || payload.workflow_job?.head_branch || 'main',
       prNumber: payload.workflow_run?.pull_requests?.[0]?.number || null,
       actorLogin: payload.sender?.login || null,

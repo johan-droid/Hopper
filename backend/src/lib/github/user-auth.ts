@@ -6,6 +6,7 @@
 
 import crypto from 'node:crypto';
 import { DEFAULT_DEV_JWT_SECRET } from '../../server/middleware/auth.js';
+import { defaultGitHubApiClient } from './api-client.js';
 
 export interface GitHubUserProfile {
   id: number;
@@ -154,39 +155,31 @@ export async function fetchGitHubUser(accessToken: string): Promise<GitHubUserPr
     };
   }
 
-  const userRes = await fetch('https://api.github.com/user', {
+  const userRes = await defaultGitHubApiClient.request<any>('https://api.github.com/user', {
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      'User-Agent': 'Hopper-CI-Doctor/1.0',
     },
+    skipRateLimit: true,
   });
 
-  if (!userRes.ok) {
-    throw new Error(`Failed to fetch GitHub user (${userRes.status})`);
-  }
-
-  const user = (await userRes.json()) as any;
+  const user = userRes.data;
 
   // If public email is null, query private emails with user:email scope
-  let primaryEmail = user.email;
+  let primaryEmail = user?.email;
   if (!primaryEmail) {
     try {
-      const emailRes = await fetch('https://api.github.com/user/emails', {
+      const emailRes = await defaultGitHubApiClient.request<Array<{
+        email: string;
+        primary: boolean;
+        verified: boolean;
+      }>>('https://api.github.com/user/emails', {
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          'User-Agent': 'Hopper-CI-Doctor/1.0',
         },
+        skipRateLimit: true,
       });
-      if (emailRes.ok) {
-        const emails = (await emailRes.json()) as Array<{
-          email: string;
-          primary: boolean;
-          verified: boolean;
-        }>;
+      if (emailRes.ok && emailRes.data) {
+        const emails = emailRes.data;
         const verifiedPrimary = emails.find((e) => e.primary && e.verified) || emails[0];
         if (verifiedPrimary) {
           primaryEmail = verifiedPrimary.email;

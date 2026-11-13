@@ -30,6 +30,11 @@ export interface Organization {
   slack_webhook_url: string | null;
   discord_webhook_url: string | null;
   auto_retry_policy: boolean;
+  installation_status?: 'active' | 'suspended' | 'deleted' | 'pending';
+  permissions?: Record<string, string>;
+  repository_selection?: 'all' | 'selected';
+  installed_at?: Date;
+  suspended_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -42,6 +47,9 @@ export interface Repository {
   full_name: string;
   default_branch: string;
   is_active: boolean;
+  visibility?: 'public' | 'private' | 'internal';
+  is_archived?: boolean;
+  last_synced_at?: Date | null;
   created_at: Date;
 }
 

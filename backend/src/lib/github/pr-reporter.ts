@@ -5,8 +5,47 @@
 
 import { DiagnosisOutput } from '../ai/diagnose.js';
 import { PlanTier } from '../billing/quota-guard.js';
+import { defaultGitHubApiClient } from './api-client.js';
+import { RequestPriority } from './rate-limiter.js';
+import { getDatabaseExecutor, DatabaseExecutor } from '../../db/client.js';
 
 export const STICKY_COMMENT_MARKER = '<!-- ci-failure-diagnosis-sticky-marker -->';
+
+export type PublicationStatus = 'pending' | 'succeeded' | 'retryable_failure' | 'permanent_failure';
+
+export async function recordPublicationAttempt(params: {
+  reportId?: string;
+  targetType: 'pr_comment' | 'check_run' | 'rerun';
+  status: PublicationStatus;
+  githubCommentId?: number;
+  checkRunId?: number;
+  errorMessage?: string;
+  payload?: any;
+  executor?: DatabaseExecutor;
+}): Promise<void> {
+  if (!params.reportId) return;
+  try {
+    const db = params.executor || getDatabaseExecutor();
+    const query = `
+      INSERT INTO github_publication_attempts (
+        report_id, target_type, status, github_comment_id, check_run_id,
+        attempt_count, error_message, payload, updated_at, last_attempted_at
+      ) VALUES ($1, $2, $3, $4, $5, 1, $6, $7, NOW(), NOW())
+      ON CONFLICT DO NOTHING;
+    `;
+    await db.query(query, [
+      params.reportId,
+      params.targetType,
+      params.status,
+      params.githubCommentId || null,
+      params.checkRunId || null,
+      params.errorMessage || null,
+      JSON.stringify(params.payload || {}),
+    ]);
+  } catch {
+    // Non-fatal if offline or DB mock
+  }
+}
 
 export interface RenderReportParams {
   orgPlan: PlanTier;
@@ -79,6 +118,8 @@ ${crossRunSection}
 }
 
 export interface UpsertStickyCommentOptions {
+  installationId?: number;
+  reportId?: string;
   installationToken?: string;
   repoFullName: string;
   prNumber: number;
@@ -88,6 +129,8 @@ export interface UpsertStickyCommentOptions {
 export interface StickyCommentResult {
   commentId: number;
   action: 'created' | 'updated';
+  status: PublicationStatus;
+  error?: string;
 }
 
 /**
@@ -97,81 +140,129 @@ export interface StickyCommentResult {
 export async function upsertPrStickyComment(
   options: UpsertStickyCommentOptions
 ): Promise<StickyCommentResult> {
-  const { installationToken, repoFullName, prNumber, markdownContent } = options;
+  const { installationId, reportId, installationToken, repoFullName, prNumber, markdownContent } = options;
 
-  // Mock / offline fallback
+  // Mock / offline fallback in development or test
   if (!installationToken || installationToken.startsWith('ghs_mock')) {
+    const mockId = 100000000 + prNumber;
+    await recordPublicationAttempt({
+      reportId,
+      targetType: 'pr_comment',
+      status: 'succeeded',
+      githubCommentId: mockId,
+      payload: { repoFullName, prNumber },
+    });
     return {
-      commentId: 100000000 + prNumber,
+      commentId: mockId,
       action: 'created',
+      status: 'succeeded',
     };
   }
 
   const baseUrl = `https://api.github.com/repos/${repoFullName}`;
-  const headers = {
-    Authorization: `Bearer ${installationToken}`,
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'Hopper-CI-Doctor/1.0',
-    'Content-Type': 'application/json',
-  };
 
   try {
     // 1. Fetch comments on PR (paginated up to first 100)
-    const listRes = await fetch(`${baseUrl}/issues/${prNumber}/comments?per_page=100`, {
-      headers,
-    });
-
-    if (listRes.ok) {
-      const comments = (await listRes.json()) as Array<{ id: number; body: string }>;
-      const existingSticky = comments.find((c) => c.body && c.body.includes(STICKY_COMMENT_MARKER));
-
-      // 2. If existing comment exists, update it in-place
-      if (existingSticky) {
-        const patchRes = await fetch(`${baseUrl}/issues/comments/${existingSticky.id}`, {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({ body: markdownContent }),
-        });
-
-        if (patchRes.ok) {
-          return {
-            commentId: existingSticky.id,
-            action: 'updated',
-          };
-        }
+    const listRes = await defaultGitHubApiClient.request<Array<{ id: number; body: string }>>(
+      `${baseUrl}/issues/${prNumber}/comments?per_page=100`,
+      {
+        headers: {
+          Authorization: `Bearer ${installationToken}`,
+        },
+        installationId,
+        resource: 'core',
+        priority: RequestPriority.TIER_2_HIGH,
       }
-    }
+    );
 
-    // 3. Create new sticky comment
-    const postRes = await fetch(`${baseUrl}/issues/${prNumber}/comments`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ body: markdownContent }),
-    });
+    const comments = listRes.data || [];
+    const existingSticky = comments.find((c) => c.body && c.body.includes(STICKY_COMMENT_MARKER));
 
-    if (postRes.ok) {
-      const created = (await postRes.json()) as { id: number };
+    // 2. If existing comment exists, update it in-place
+    if (existingSticky) {
+      await defaultGitHubApiClient.request(
+        `${baseUrl}/issues/comments/${existingSticky.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${installationToken}`,
+          },
+          body: { body: markdownContent },
+          installationId,
+          resource: 'core',
+          priority: RequestPriority.TIER_2_HIGH,
+        }
+      );
+
+      await recordPublicationAttempt({
+        reportId,
+        targetType: 'pr_comment',
+        status: 'succeeded',
+        githubCommentId: existingSticky.id,
+        payload: { repoFullName, prNumber, action: 'updated' },
+      });
+
       return {
-        commentId: created.id,
-        action: 'created',
+        commentId: existingSticky.id,
+        action: 'updated',
+        status: 'succeeded',
       };
     }
 
+    // 3. Create new sticky comment
+    const postRes = await defaultGitHubApiClient.request<{ id: number }>(
+      `${baseUrl}/issues/${prNumber}/comments`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${installationToken}`,
+        },
+        body: { body: markdownContent },
+        installationId,
+        resource: 'core',
+        priority: RequestPriority.TIER_2_HIGH,
+      }
+    );
+
+    const createdId = postRes.data.id;
+    await recordPublicationAttempt({
+      reportId,
+      targetType: 'pr_comment',
+      status: 'succeeded',
+      githubCommentId: createdId,
+      payload: { repoFullName, prNumber, action: 'created' },
+    });
+
     return {
-      commentId: 100000000 + prNumber,
+      commentId: createdId,
       action: 'created',
+      status: 'succeeded',
     };
   } catch (err: any) {
+    const isRetryable = err.isRetryable ?? false;
+    const failureStatus: PublicationStatus = isRetryable ? 'retryable_failure' : 'permanent_failure';
+
+    await recordPublicationAttempt({
+      reportId,
+      targetType: 'pr_comment',
+      status: failureStatus,
+      errorMessage: err.message,
+      payload: { repoFullName, prNumber },
+    });
+
     console.warn(`[PrReporter] Failed to upsert sticky PR comment: ${err.message}.`);
     return {
-      commentId: 100000000 + prNumber,
+      commentId: 0,
       action: 'created',
+      status: failureStatus,
+      error: err.message,
     };
   }
 }
 
 export interface CreateCheckRunOptions {
+  installationId?: number;
+  reportId?: string;
   installationToken?: string;
   repoFullName: string;
   commitSha: string;
@@ -183,6 +274,8 @@ export interface CreateCheckRunOptions {
 export interface CheckRunResult {
   checkRunId: number;
   url?: string;
+  status: PublicationStatus;
+  error?: string;
 }
 
 /**
@@ -193,6 +286,8 @@ export async function createGitHubCheckRun(
   options: CreateCheckRunOptions
 ): Promise<CheckRunResult> {
   const {
+    installationId,
+    reportId,
     installationToken,
     repoFullName,
     commitSha,
@@ -202,17 +297,22 @@ export async function createGitHubCheckRun(
   } = options;
 
   if (!installationToken || installationToken.startsWith('ghs_mock')) {
-    return { checkRunId: 999900001, url: `https://github.com/${repoFullName}/runs/mock` };
+    const mockId = 999900001;
+    await recordPublicationAttempt({
+      reportId,
+      targetType: 'check_run',
+      status: 'succeeded',
+      checkRunId: mockId,
+      payload: { repoFullName, commitSha },
+    });
+    return {
+      checkRunId: mockId,
+      url: `https://github.com/${repoFullName}/runs/mock`,
+      status: 'succeeded',
+    };
   }
 
   const baseUrl = `https://api.github.com/repos/${repoFullName}`;
-  const headers = {
-    Authorization: `Bearer ${installationToken}`,
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'Hopper-CI-Doctor/1.0',
-    'Content-Type': 'application/json',
-  };
 
   const annotations: Array<{
     path: string;
@@ -254,23 +354,54 @@ export async function createGitHubCheckRun(
   };
 
   try {
-    const res = await fetch(`${baseUrl}/check-runs`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-      const data = (await res.json()) as { id: number; html_url?: string };
-      return { checkRunId: data.id, url: data.html_url };
-    }
-  } catch (err: any) {
-    console.warn(`[PrReporter] Failed to create GitHub Check Run: ${err.message}`);
-  }
+    const res = await defaultGitHubApiClient.request<{ id: number; html_url?: string }>(
+      `${baseUrl}/check-runs`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${installationToken}`,
+        },
+        body: payload,
+        installationId,
+        resource: 'core',
+        priority: RequestPriority.TIER_2_HIGH,
+      }
+    );
 
-  return { checkRunId: 999900001 };
+    const createdId = res.data.id;
+    await recordPublicationAttempt({
+      reportId,
+      targetType: 'check_run',
+      status: 'succeeded',
+      checkRunId: createdId,
+      payload: { repoFullName, commitSha },
+    });
+
+    return { checkRunId: createdId, url: res.data.html_url, status: 'succeeded' };
+  } catch (err: any) {
+    const isRetryable = err.isRetryable ?? false;
+    const failureStatus: PublicationStatus = isRetryable ? 'retryable_failure' : 'permanent_failure';
+
+    await recordPublicationAttempt({
+      reportId,
+      targetType: 'check_run',
+      status: failureStatus,
+      errorMessage: err.message,
+      payload: { repoFullName, commitSha },
+    });
+
+    console.warn(`[PrReporter] Failed to create GitHub Check Run: ${err.message}`);
+    return {
+      checkRunId: 0,
+      status: failureStatus,
+      error: err.message,
+    };
+  }
 }
 
 export interface TriggerRerunOptions {
+  installationId?: number;
+  reportId?: string;
   installationToken?: string;
   repoFullName: string;
   runId: number;
@@ -281,6 +412,7 @@ export interface TriggerRerunOptions {
 export interface TriggerRerunResult {
   triggered: boolean;
   reason: string;
+  status: PublicationStatus;
 }
 
 /**
@@ -291,6 +423,8 @@ export async function triggerWorkflowRerun(
   options: TriggerRerunOptions
 ): Promise<TriggerRerunResult> {
   const {
+    installationId,
+    reportId,
     installationToken,
     repoFullName,
     runId,
@@ -302,6 +436,7 @@ export async function triggerWorkflowRerun(
     return {
       triggered: false,
       reason: 'Auto-retry policy is disabled for this organization/repository',
+      status: 'permanent_failure',
     };
   }
 
@@ -309,40 +444,65 @@ export async function triggerWorkflowRerun(
     return {
       triggered: false,
       reason: `Flakiness score (${flakinessScore}%) is below the automated rerun threshold (85%)`,
+      status: 'permanent_failure',
     };
   }
 
   if (!installationToken || installationToken.startsWith('ghs_mock')) {
+    await recordPublicationAttempt({
+      reportId,
+      targetType: 'rerun',
+      status: 'succeeded',
+      payload: { repoFullName, runId },
+    });
     return {
       triggered: true,
       reason: 'Mock rerun triggered successfully',
+      status: 'succeeded',
     };
   }
 
   const url = `https://api.github.com/repos/${repoFullName}/actions/runs/${runId}/rerun-failed-jobs`;
-  const headers = {
-    Authorization: `Bearer ${installationToken}`,
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'Hopper-CI-Doctor/1.0',
-  };
 
   try {
-    const res = await fetch(url, { method: 'POST', headers });
-    if (res.status === 201 || res.status === 200) {
-      return {
-        triggered: true,
-        reason: `Successfully triggered rerun for flaky failure on run ${runId}`,
-      };
-    }
+    const res = await defaultGitHubApiClient.request(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${installationToken}`,
+      },
+      installationId,
+      resource: 'actions',
+      priority: RequestPriority.TIER_3_MEDIUM,
+    });
+
+    await recordPublicationAttempt({
+      reportId,
+      targetType: 'rerun',
+      status: 'succeeded',
+      payload: { repoFullName, runId },
+    });
+
     return {
-      triggered: false,
-      reason: `GitHub API returned ${res.status}: ${await res.text()}`,
+      triggered: true,
+      reason: `Successfully triggered rerun for flaky failure on run ${runId}`,
+      status: 'succeeded',
     };
   } catch (err: any) {
+    const isRetryable = err.isRetryable ?? false;
+    const failureStatus: PublicationStatus = isRetryable ? 'retryable_failure' : 'permanent_failure';
+
+    await recordPublicationAttempt({
+      reportId,
+      targetType: 'rerun',
+      status: failureStatus,
+      errorMessage: err.message,
+      payload: { repoFullName, runId },
+    });
+
     return {
       triggered: false,
       reason: `Failed to trigger rerun: ${err.message}`,
+      status: failureStatus,
     };
   }
 }

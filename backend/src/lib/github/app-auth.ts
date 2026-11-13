@@ -5,9 +5,11 @@
  */
 
 import crypto from 'node:crypto';
+import { defaultGitHubApiClient } from './api-client.js';
 
 // Token cache: maps installationId -> { token: string, expiresAt: number }
 const installationTokenCache = new Map<number, { token: string; expiresAt: number }>();
+const inFlightTokenRequests = new Map<number, Promise<string>>();
 let mockInstallationToken: string | null = null;
 
 export function setMockInstallationToken(token: string | null): void {
@@ -16,6 +18,7 @@ export function setMockInstallationToken(token: string | null): void {
 
 export function clearTokenCache(): void {
   installationTokenCache.clear();
+  inFlightTokenRequests.clear();
   mockInstallationToken = null;
 }
 
@@ -123,6 +126,11 @@ export async function getInstallationToken(
     return cached.token;
   }
 
+  // Check in-flight promise to coalesce concurrent requests
+  if (!options.forceRefresh && inFlightTokenRequests.has(installationId)) {
+    return inFlightTokenRequests.get(installationId)!;
+  }
+
   // If in mock AI provider mode without real keys in development, return deterministic synthetic token
   if (process.env.AI_PROVIDER === 'mock' || !process.env.GITHUB_APP_PRIVATE_KEY) {
     if (isProduction) {
@@ -136,45 +144,45 @@ export async function getInstallationToken(
     return syntheticToken;
   }
 
-  try {
-    const appJwt = generateAppJwt();
-    const response = await fetch(
-      `https://api.github.com/app/installations/${installationId}/access_tokens`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${appJwt}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          'User-Agent': 'Hopper-CI-Doctor/1.0',
-        },
+  const tokenPromise = (async () => {
+    try {
+      const appJwt = generateAppJwt();
+      const response = await defaultGitHubApiClient.request<{ token: string; expires_at: string }>(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${appJwt}`,
+          },
+          skipRateLimit: true,
+        }
+      );
+
+      const data = response.data;
+      const expiresAt = new Date(data.expires_at).getTime();
+
+      installationTokenCache.set(installationId, {
+        token: data.token,
+        expiresAt,
+      });
+
+      return data.token;
+    } catch (err: any) {
+      if (isProduction) {
+        throw err;
       }
-    );
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`GitHub token minting failed (${response.status}): ${errText}`);
+      // If request fails in development, fallback to synthetic token
+      const fallbackToken = `ghs_fallback_token_${installationId}`;
+      installationTokenCache.set(installationId, {
+        token: fallbackToken,
+        expiresAt: now + 15 * 60 * 1000,
+      });
+      return fallbackToken;
+    } finally {
+      inFlightTokenRequests.delete(installationId);
     }
+  })();
 
-    const data = (await response.json()) as { token: string; expires_at: string };
-    const expiresAt = new Date(data.expires_at).getTime();
-
-    installationTokenCache.set(installationId, {
-      token: data.token,
-      expiresAt,
-    });
-
-    return data.token;
-  } catch (err: any) {
-    if (isProduction) {
-      throw err;
-    }
-    // If request fails in development, fallback to synthetic token
-    const fallbackToken = `ghs_fallback_token_${installationId}`;
-    installationTokenCache.set(installationId, {
-      token: fallbackToken,
-      expiresAt: now + 15 * 60 * 1000,
-    });
-    return fallbackToken;
-  }
+  inFlightTokenRequests.set(installationId, tokenPromise);
+  return tokenPromise;
 }

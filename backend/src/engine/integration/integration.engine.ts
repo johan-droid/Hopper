@@ -44,6 +44,7 @@ export class IntegrationEngine {
     try {
       const token = await getInstallationToken(params.installationId);
       return await fetchJobLogStream({
+        installationId: params.installationId,
         installationToken: token,
         repoFullName: params.repoFullName,
         jobId: params.githubJobId,
@@ -70,6 +71,7 @@ export class IntegrationEngine {
     try {
       const token = await getInstallationToken(params.installationId);
       return await fetchCommitModifiedFiles({
+        installationId: params.installationId,
         installationToken: token,
         repoFullName: params.repoFullName,
         commitSha: params.commitSha,
@@ -91,6 +93,7 @@ export class IntegrationEngine {
     try {
       const token = await getInstallationToken(params.installationId);
       return await fetchCommitDiff({
+        installationId: params.installationId,
         installationToken: token,
         repoFullName: params.repoFullName,
         commitSha: params.commitSha,
@@ -112,6 +115,7 @@ export class IntegrationEngine {
     try {
       const token = await getInstallationToken(params.installationId);
       return await fetchWorkflowDefinition({
+        installationId: params.installationId,
         installationToken: token,
         repoFullName: params.repoFullName,
         workflowPathOrName: params.workflowPathOrName,
@@ -127,6 +131,7 @@ export class IntegrationEngine {
    */
   async publishPullRequestComment(params: {
     installationId: number;
+    reportId?: string;
     repoFullName: string;
     workflowName: string;
     jobName: string;
@@ -165,12 +170,14 @@ export class IntegrationEngine {
       try {
         const token = await getInstallationToken(params.installationId);
         const res = await upsertPrStickyComment({
+          installationId: params.installationId,
+          reportId: params.reportId,
           installationToken: token,
           repoFullName: params.repoFullName,
           prNumber: params.prNumber,
           markdownContent: commentText,
         });
-        githubCommentId = res.commentId;
+        githubCommentId = res.commentId || undefined;
       } catch (err: any) {
         console.warn(`[IntegrationEngine] Failed to post sticky PR comment: ${err.message}`);
       }
@@ -184,6 +191,7 @@ export class IntegrationEngine {
    */
   async createCheckRun(params: {
     installationId: number;
+    reportId?: string;
     repoFullName: string;
     commitSha: string;
     name?: string;
@@ -193,6 +201,8 @@ export class IntegrationEngine {
     try {
       const token = await getInstallationToken(params.installationId);
       return await createGitHubCheckRun({
+        installationId: params.installationId,
+        reportId: params.reportId,
         installationToken: token,
         repoFullName: params.repoFullName,
         commitSha: params.commitSha,
@@ -201,7 +211,7 @@ export class IntegrationEngine {
         flakinessScore: params.flakinessScore,
       });
     } catch {
-      return { checkRunId: 999900001 };
+      return { checkRunId: 0, status: 'permanent_failure' };
     }
   }
 
@@ -210,6 +220,7 @@ export class IntegrationEngine {
    */
   async triggerWorkflowRerun(params: {
     installationId: number;
+    reportId?: string;
     repoFullName: string;
     runId: number;
     flakinessScore: number;
@@ -218,6 +229,8 @@ export class IntegrationEngine {
     try {
       const token = await getInstallationToken(params.installationId);
       return await triggerWorkflowRerun({
+        installationId: params.installationId,
+        reportId: params.reportId,
         installationToken: token,
         repoFullName: params.repoFullName,
         runId: params.runId,
@@ -225,7 +238,7 @@ export class IntegrationEngine {
         autoRetryPolicy: params.autoRetryPolicy,
       });
     } catch (err: any) {
-      return { triggered: false, reason: err.message };
+      return { triggered: false, reason: err.message, status: 'permanent_failure' };
     }
   }
 }

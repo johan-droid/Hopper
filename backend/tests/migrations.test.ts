@@ -15,13 +15,17 @@ describe('Database Migrations', () => {
     const result = await runMigrations(executor, process.cwd());
 
     expect(result.applied).toBe(true);
-    expect(executed).toHaveLength(12);
+    expect(executed).toHaveLength(13);
     expect(executed[9]).toContain('hopper_job_queue');
     expect(executed[9]).toContain('hopper_claim_jobs');
     expect(executed[10]).toContain('0011_denormalize_workspace_id_and_leaf_rls.sql');
     expect(executed[10]).toContain('idx_failure_signatures_workspace_id');
     expect(executed[11]).toContain('0012_organization_ai_budget_ledgers.sql');
     expect(executed[11]).toContain('organization_ai_budget_settings');
+    expect(executed[12]).toContain('0013_github_integration_and_rate_limiting.sql');
+    expect(executed[12]).toContain('github_api_rate_limits');
+    expect(executed[12]).toContain('github_integration_audit_events');
+    expect(executed[12]).toContain('github_publication_attempts');
     expect(executed[0]).toContain('CREATE TABLE IF NOT EXISTS organizations');
     expect(executed[1]).toContain('CREATE INDEX CONCURRENTLY IF NOT EXISTS');
     expect(executed[1]).toContain('USING hnsw (embedding vector_cosine_ops)');

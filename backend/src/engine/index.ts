@@ -306,6 +306,7 @@ export class HopperEngine {
     // 10. Integration: Render and Publish Sticky PR Comment
     const { commentText, githubCommentId } = await this.integration.publishPullRequestComment({
       installationId: event.installationId,
+      reportId: report.id,
       repoFullName: event.repoFullName,
       workflowName: event.workflowName,
       jobName: event.jobName,
@@ -331,6 +332,7 @@ export class HopperEngine {
     // 11. Create GitHub Check Run with inline line annotations
     await this.integration.createCheckRun({
       installationId: event.installationId,
+      reportId: report.id,
       repoFullName: event.repoFullName,
       commitSha: event.commitSha,
       diagnosis,
@@ -341,6 +343,7 @@ export class HopperEngine {
     if (pipelineContext.org.autoRetryPolicy && intelligence.flakinessScore >= 85) {
       await this.integration.triggerWorkflowRerun({
         installationId: event.installationId,
+        reportId: report.id,
         repoFullName: event.repoFullName,
         runId: event.githubRunId,
         flakinessScore: intelligence.flakinessScore,

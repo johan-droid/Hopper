@@ -98,4 +98,51 @@ export class RepositoryRepository {
     }
     return res.rows[0];
   }
+
+  async deactivateByOrgId(orgId: string): Promise<number> {
+    const res = await this.db.query(
+      'UPDATE repositories SET is_active = FALSE WHERE org_id = $1',
+      [orgId]
+    );
+    return res.rowCount ?? 0;
+  }
+
+  async deactivateByGithubRepoId(githubRepoId: number): Promise<boolean> {
+    const res = await this.db.query(
+      'UPDATE repositories SET is_active = FALSE WHERE github_repo_id = $1',
+      [githubRepoId]
+    );
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  async updateSyncMetadata(
+    githubRepoId: number,
+    metadata: {
+      visibility?: 'public' | 'private' | 'internal';
+      isArchived?: boolean;
+      lastSyncedAt?: Date;
+      fullName?: string;
+      defaultBranch?: string;
+    }
+  ): Promise<Repository | null> {
+    const res = await this.db.query<Repository>(
+      `UPDATE repositories
+       SET visibility = COALESCE($2, visibility),
+           is_archived = COALESCE($3, is_archived),
+           last_synced_at = COALESCE($4, last_synced_at),
+           full_name = COALESCE($5, full_name),
+           default_branch = COALESCE($6, default_branch)
+       WHERE github_repo_id = $1
+       RETURNING *;`,
+      [
+        githubRepoId,
+        metadata.visibility || null,
+        metadata.isArchived ?? null,
+        metadata.lastSyncedAt ? metadata.lastSyncedAt.toISOString() : null,
+        metadata.fullName || null,
+        metadata.defaultBranch || null,
+      ]
+    );
+    return res.rows[0] || null;
+  }
 }

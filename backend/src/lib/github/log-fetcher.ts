@@ -4,6 +4,9 @@
  * Bounds raw log extraction to O(1) memory by buffering only the tail 300KB.
  */
 
+import { defaultGitHubApiClient } from './api-client.js';
+import { RequestPriority } from './rate-limiter.js';
+
 export interface LogFetchResult {
   jobId: number;
   jobName: string;
@@ -62,6 +65,7 @@ export const SAMPLE_RAW_LOGS: Record<string, string> = {
 };
 
 export interface FetchJobLogOptions {
+  installationId?: number;
   installationToken?: string;
   repoFullName: string;
   jobId: number;
@@ -158,44 +162,19 @@ export async function fetchJobLogStream(options: FetchJobLogOptions): Promise<st
 
   try {
     const url = `https://api.github.com/repos/${options.repoFullName}/actions/jobs/${options.jobId}/logs`;
-    let response = await fetch(url, {
-      redirect: 'manual',
+    const response = await defaultGitHubApiClient.request<string>(url, {
+      method: 'GET',
       headers: {
         Authorization: `Bearer ${options.installationToken}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': 'Hopper-CI-Doctor/1.0',
       },
-      signal: AbortSignal.timeout(15_000),
+      installationId: options.installationId,
+      resource: 'actions',
+      priority: RequestPriority.TIER_1_CRITICAL,
+      maxBytes,
+      timeoutMs: 15_000,
     });
 
-    // Strip authorization header when following redirects to external pre-signed storage URLs (e.g. AWS S3)
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      const location = response.headers.get('location');
-      if (location) {
-        response = await fetch(location, {
-          redirect: 'follow',
-          signal: AbortSignal.timeout(15_000),
-        });
-      }
-    }
-
-    if (!response.ok) {
-      if (process.env.NODE_ENV === 'production') {
-        throw new Error(`[LogFetcher] GitHub log stream failed with status ${response.status} for job ${options.jobId}`);
-      }
-      console.warn(`[LogFetcher] GitHub log stream returned status ${response.status}. Using fallback log.`);
-      return SAMPLE_RAW_LOGS.jest_assertion_fail;
-    }
-
-    // Stream-truncate if readable stream is available
-    if (response.body && typeof response.body.getReader === 'function') {
-      const headLimit = Math.min(64 * 1024, Math.floor(maxBytes * 0.2));
-      const tailLimit = maxBytes - headLimit;
-      return await streamLogWithHeadTailBuffer(response.body, headLimit, tailLimit);
-    }
-
-    const fullLog = await response.text();
+    const fullLog = response.rawText || response.data || '';
     return fullLog.length > maxBytes ? fullLog.slice(-maxBytes) : fullLog;
   } catch (err: any) {
     if (process.env.NODE_ENV === 'production') {
@@ -207,6 +186,7 @@ export async function fetchJobLogStream(options: FetchJobLogOptions): Promise<st
 }
 
 export interface FetchCommitDiffOptions {
+  installationId?: number;
   installationToken?: string;
   repoFullName: string;
   commitSha: string;
@@ -233,20 +213,19 @@ index 10a2b3c..45d6e7f 100644
 
   try {
     const url = `https://api.github.com/repos/${options.repoFullName}/commits/${options.commitSha}`;
-    const response = await fetch(url, {
+    const response = await defaultGitHubApiClient.request<string>(url, {
+      method: 'GET',
       headers: {
         Authorization: `Bearer ${options.installationToken}`,
         Accept: 'application/vnd.github.v3.diff',
-        'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': 'Hopper-CI-Doctor/1.0',
       },
+      installationId: options.installationId,
+      resource: 'core',
+      priority: RequestPriority.TIER_1_CRITICAL,
+      maxBytes,
     });
 
-    if (!response.ok) {
-      return '';
-    }
-
-    const diffText = await response.text();
+    const diffText = response.rawText || response.data || '';
     return diffText.length > maxBytes ? diffText.slice(0, maxBytes) + '\n\n... [DIFF TRUNCATED]' : diffText;
   } catch {
     return '';
@@ -254,6 +233,7 @@ index 10a2b3c..45d6e7f 100644
 }
 
 export interface FetchWorkflowOptions {
+  installationId?: number;
   installationToken?: string;
   repoFullName: string;
   workflowPathOrName: string;
@@ -290,20 +270,18 @@ jobs:
 
     const refQuery = options.ref ? `?ref=${encodeURIComponent(options.ref)}` : '';
     const url = `https://api.github.com/repos/${options.repoFullName}/contents/${path}${refQuery}`;
-    const response = await fetch(url, {
+    const response = await defaultGitHubApiClient.request<string>(url, {
+      method: 'GET',
       headers: {
         Authorization: `Bearer ${options.installationToken}`,
         Accept: 'application/vnd.github.raw+yaml',
-        'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': 'Hopper-CI-Doctor/1.0',
       },
+      installationId: options.installationId,
+      resource: 'core',
+      priority: RequestPriority.TIER_1_CRITICAL,
     });
 
-    if (!response.ok) {
-      return null;
-    }
-
-    const content = await response.text();
+    const content = response.rawText || response.data || '';
     return content.slice(0, 20_000);
   } catch {
     return null;
@@ -311,6 +289,7 @@ jobs:
 }
 
 export interface FetchCommitFilesOptions {
+  installationId?: number;
   installationToken?: string;
   repoFullName: string;
   commitSha: string;
@@ -327,20 +306,17 @@ export async function fetchCommitModifiedFiles(options: FetchCommitFilesOptions)
 
   try {
     const url = `https://api.github.com/repos/${options.repoFullName}/commits/${options.commitSha}`;
-    const response = await fetch(url, {
+    const response = await defaultGitHubApiClient.request<{ files?: Array<{ filename: string }> }>(url, {
+      method: 'GET',
       headers: {
         Authorization: `Bearer ${options.installationToken}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': 'Hopper-CI-Doctor/1.0',
       },
+      installationId: options.installationId,
+      resource: 'core',
+      priority: RequestPriority.TIER_1_CRITICAL,
     });
 
-    if (!response.ok) {
-      return ['src/auth/jwt-verifier.ts', 'src/auth/jwt-verifier.spec.ts'];
-    }
-
-    const data = (await response.json()) as { files?: Array<{ filename: string }> };
+    const data = response.data;
     return (data.files || []).map((f) => f.filename).slice(0, 50);
   } catch {
     return ['src/auth/jwt-verifier.ts', 'src/auth/jwt-verifier.spec.ts'];

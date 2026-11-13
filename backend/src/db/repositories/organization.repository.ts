@@ -94,13 +94,19 @@ export class OrganizationRepository {
         github_account_type,
         plan,
         monthly_run_limit,
-        workspace_id
+        workspace_id,
+        installation_status,
+        permissions,
+        repository_selection
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       ON CONFLICT (github_installation_id)
       DO UPDATE SET
         github_account_login = EXCLUDED.github_account_login,
         github_account_type = EXCLUDED.github_account_type,
+        installation_status = EXCLUDED.installation_status,
+        permissions = COALESCE(EXCLUDED.permissions, organizations.permissions),
+        repository_selection = COALESCE(EXCLUDED.repository_selection, organizations.repository_selection),
         workspace_id = COALESCE(EXCLUDED.workspace_id, organizations.workspace_id),
         updated_at = NOW()
       RETURNING *;
@@ -113,9 +119,71 @@ export class OrganizationRepository {
       input.plan || 'free',
       defaultLimit,
       input.workspaceId ?? null,
+      (input as any).installationStatus || 'active',
+      JSON.stringify((input as any).permissions || {}),
+      (input as any).repositorySelection || 'all',
     ]);
 
     return res.rows[0];
+  }
+
+  async updateInstallationStatus(
+    installationId: number,
+    status: 'active' | 'suspended' | 'deleted',
+    metadata: {
+      permissions?: any;
+      repositorySelection?: string;
+    } = {}
+  ): Promise<Organization | null> {
+    const isSuspended = status === 'suspended';
+    const sql = `
+      UPDATE organizations
+      SET 
+        installation_status = $2,
+        suspended_at = CASE WHEN $3 = TRUE THEN NOW() ELSE NULL END,
+        permissions = COALESCE($4, permissions),
+        repository_selection = COALESCE($5, repository_selection),
+        updated_at = NOW()
+      WHERE github_installation_id = $1
+      RETURNING *;
+    `;
+
+    const res = await this.db.query<Organization>(sql, [
+      installationId,
+      status,
+      isSuspended,
+      metadata.permissions ? JSON.stringify(metadata.permissions) : null,
+      metadata.repositorySelection || null,
+    ]);
+
+    return res.rows[0] || null;
+  }
+
+  async recordAuditEvent(params: {
+    organizationId?: string | null;
+    installationId?: number | null;
+    eventType: string;
+    actorLogin?: string | null;
+    details?: any;
+    ipAddress?: string | null;
+  }): Promise<void> {
+    try {
+      const sql = `
+        INSERT INTO github_integration_audit_events (
+          organization_id, installation_id, event_type, actor_login, details, ip_address
+        ) VALUES ($1, $2, $3, $4, $5, $6);
+      `;
+      await this.db.query(sql, [
+        params.organizationId || null,
+        params.installationId || null,
+        params.eventType,
+        params.actorLogin || null,
+        JSON.stringify(params.details || {}),
+        params.ipAddress || null,
+      ]);
+    } catch {
+      // Non-fatal if offline
+    }
   }
 
   /**
