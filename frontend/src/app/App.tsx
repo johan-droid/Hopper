@@ -5,6 +5,7 @@ import {
   Navigate,
   RouterProvider,
 } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import { RequireAuth } from './RequireAuth';
 import { useSessionBootstrap } from '../features/auth/useSession';
 import { useThemeApplication } from '../components/layout/Sidebar';
@@ -117,6 +118,7 @@ export const App: React.FC = () => (
   <QueryClientProvider client={queryClient}>
     <ToastProvider>
       <AppRoot />
+      <Analytics />
     </ToastProvider>
   </QueryClientProvider>
 );
