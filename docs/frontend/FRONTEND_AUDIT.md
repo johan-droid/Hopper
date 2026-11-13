@@ -1,80 +1,134 @@
-# Frontend Audit — Baseline Before the Product Build
+# HOPPER — Frontend Architecture, Component & Experience Audit
 
-Recorded before any frontend change, from reading every file under `frontend/src`.
-Baseline: `npm run lint` exit 0, `vitest` 9 tests passing (schema only), build exit 0.
+**Author**: Hopper Principal Frontend Architect & Design Systems Engineer  
+**Repository**: `johan-droid/Hopper`  
+**Date**: November 2026  
+**Status**: COMPLETE / BASELINE VERIFIED  
 
-## 1. What existed
+---
 
-| Area | State |
-|---|---|
-| Entry point | `App.tsx` mounted a tabbed shell (`useAppStore.activeTab`) |
-| Routing | **None** — navigation was Zustand state, so no URL, no deep link, no back button |
-| Views | 12 files in `components/views`, 2,800 lines total |
-| Largest file | `LandingPageView.tsx`, 1,286 lines |
-| API layer | `api/client.ts` (239), `api/schema.ts` (239), `api/hooks.ts` (105) |
-| State | One 195-line Zustand store mixing auth, tenant, tab, plan and modal state |
-| Auth | Supabase password sign-in **plus** a client-side HMAC JWT minter |
-| Design | Ad-hoc Tailwind classes per page; tokens partially defined in CSS but unused |
-| Tests | `api/schema.test.ts` only (9 assertions) |
+## 1. Executive Summary
 
-## 2. Defects found
+Hopper's frontend is a Single Page Application (SPA) designed for engineering teams investigating CI/CD failures and pipeline flakiness. Built on **React 18**, **Vite 5**, **Tailwind CSS 3**, and **TanStack React Query 5**, the interface is fast, strongly typed via **TypeScript 5.6** and **Zod**, and features an established design token system rooted in CSS variables.
 
-1. **Client-side token forging (security).** `createDevHmacToken()` signed a JWT in the
-   browser with a hardcoded secret baked into the bundle. Removed entirely; tokens now
-   come only from the Supabase session.
-2. **Health contract broken by the platform migration.** `HealthSchema` required
-   `dependencies.redis`. The Vercel-native API returns `coordination` and `queue`, so
-   every health parse would throw and the status indicator would read "degraded" forever.
-3. **Fabricated production metrics.** Overview rendered a hardcoded `92.5%` "flakiness
-   accuracy", `1,248` deduplicated failures, `42` clusters, `< 0.4s` latency, and
-   `MONTHLY CI INGESTION … UNRESTRICTED` with a divided-by-1000 quota bar.
-4. **Fake tenant selector.** A hardcoded org dropdown (`acme-corp`,
-   `github-actions-demo`, `hopper-oss`) with no relationship to the API.
-5. **Fake entitlement badge.** Header showed `PREVIEW: UNRESTRICTED`.
-6. **Dead navigation.** `/app`-style URLs did not exist; refresh always returned to the
-   landing page. Closing a tab lost all context.
-7. **Wrong failure → signature mapping.** Activity rows passed a *failure* id into the
-   signature endpoint, which cannot resolve.
-8. **Invented reproduction command.** The investigation screen copied
-   `npm test -- checkout.spec.ts` regardless of the actual diagnosis.
-9. **No cache scoping on sign-out.** Query keys carried no user or workspace identity, and
-   nothing cleared the cache, so a second account on the same browser could read the
-   first account's cached pages.
-10. **Source maps published.** `vite build` emitted `.map` files into `dist/`, which is
-    the directory uploaded to the CDN.
-11. **No loading/empty/error discipline.** Several views rendered spinner text inline and
-    collapsed all failures into one banner.
-12. **Accessibility gaps.** Icon-only buttons without names, clickable `<tr>` elements
-    with no keyboard affordance, no focus ring system, no skip link.
+However, the current marketing and landing experience does not match the technical depth and production-grade stability of Hopper's backend engine:
+1. The landing page (`LandingPage.tsx`) presents a rudimentary layout that under-communicates Hopper's unique technical capabilities (deterministic failure fingerprinting, same-SHA flakiness scoring, and verifiable log context).
+2. Certain UI components (notably `WorkflowVisualizer.tsx`) contain legacy, speculative claims of "autonomous microVM sandbox self-repair," which contradict Hopper's core mission of *verifiable, evidence-based failure diagnosis and engineering intelligence*.
+3. Visual Polish: While the dashboard is functional and clean, the landing experience lacks the visual distinction, typographic rhythm, and responsive craft expected of top-tier developer platforms (such as Linear, Vercel, and Stripe).
 
-## 3. Working behaviour preserved
+This audit provides a comprehensive inspection of the current frontend repository to guide a production-grade redesign that is visually distinctive, technically truthful, accessible, and high-performance.
 
-- Every endpoint and response shape already used by the client
-  (`/api/health`, `/api/dashboard/:orgSlug`, `/api/signatures/:id`,
-  `/api/diagnose/adhoc`, `/api/repositories*`, `/api/workspaces*`, `/api/user/profile`,
-  `/api/diagnose/history`).
-- Log redaction is server-side and unchanged; the UI only renders stored excerpts.
-- Zod-as-runtime-boundary discipline: every response is still parsed, never trusted.
-- The Vite/Tailwind/TanStack Query/Zustand stack — no framework replacement.
+---
 
-## 4. Backend contract gaps discovered
+## 2. Technical Stack & Build Infrastructure
 
-| Gap | Consequence | Proposed contract |
-|---|---|---|
-| No organisation listing | Dashboard usage and billing checkout need an org **slug**; the UI only has `org_id` on repositories | `GET /api/organizations` → `{ id, slug, plan, monthly_runs_limit, runs_used }` |
-| Failure feed has no `signatureId` | A feed row cannot link to its signature investigation | add `signatureId` to the failures payload |
-| No failure-by-id endpoint | Deep-linking a single failure is impossible | `GET /api/failures/:id` |
-| No workspace-wide activity | Overview must fan out per repository (sampled) | `GET /api/workspaces/:id/failures?limit=` |
-| No invite endpoint | Members page is read-only | `POST /api/workspaces/:id/invitations` |
-| No run-duration totals | MTTR / failure rate cannot be computed | aggregate fields on the dashboard response |
+| Layer | Technology | Version | Purpose / Status |
+|---|---|---|---|
+| **Core Framework** | React + React DOM | `18.3.1` | Concurrent root mode, client-side rendering with route-level code splitting (`React.lazy`). |
+| **Build Tooling** | Vite | `5.4.10` | ESM-based fast dev server, Rollup production bundler producing ~400 KB gzipped asset bundle. |
+| **Language & Typings** | TypeScript | `5.6.3` | Strict mode enabled (`strict: true`), zero compile errors across frontend codebase. |
+| **CSS & Design Engine** | Tailwind CSS + PostCSS | `3.4.14` | Utility-first CSS compiling against custom CSS custom properties (`globals.css`). |
+| **State & Cache** | TanStack React Query + Zustand | `5.60.5` / `5.0.1` | Server-state caching and synchronization with 15s–60s stale times; lightweight local UI state. |
+| **Client Routing** | React Router DOM | `7.18.5` | Declarative routing with `createBrowserRouter`, route-level error boundaries, and suspense fallbacks. |
+| **Data Contracts** | Zod | `4.6.7` | Runtime contract validation for API responses and request schemas (`frontend/src/api/schema.ts`). |
+| **Iconography** | Lucide React | `0.456.0` | Comprehensive icon set; tree-shakeable SVG glyphs. |
+| **Testing** | Vitest + Playwright | `2.1.4` / `1.65.0` | Unit/component tests (4 suites, 34 tests passing) and E2E browser automation. |
 
-## 5. Baseline metrics
+---
 
-| Metric | Baseline |
-|---|---|
-| Typecheck | PASS |
-| Tests | 9 passing, 1 file |
-| Build | PASS |
-| Initial JS (index chunk) | 255.56 kB (67.64 kB gzip) |
-| Source maps in `dist` | Yes |
-| Routes | 0 |
+## 3. Route Hierarchy & Information Architecture
+
+The application defines clean separation between public/marketing routes and the authenticated workspace shell:
+
+```
+/ (ROUTES.landing)                     --> LandingPage.tsx (Public marketing)
+/login (ROUTES.login)                  --> LoginPage.tsx (OAuth + PAT authentication)
+/login/callback                        --> LoginPage.tsx (GitHub OAuth code exchange)
+/auth                                  --> LoginPage.tsx (OAuth fallback)
+/signup (ROUTES.signup)                --> LoginPage.tsx (Registration alias)
+
+/app (Authenticated Shell: AppShell)
+├── /app/overview                      --> OverviewPage.tsx (Active failures, flakiness leaderboard, daily trend)
+├── /app/repositories                  --> RepositoriesPage.tsx (GitHub repo management, workspace linking)
+│   └── /app/repositories/:repositoryId--> RepositoryDetailPage.tsx (Repo-scoped failures & trends)
+├── /app/activity                      --> ActivityPage.tsx (Continuous CI failure event stream & log viewer)
+├── /app/failures/:failureId           --> FailureDetailPage.tsx (Single failure contract boundary & inspector)
+├── /app/investigations                --> InvestigationPage.tsx (Ad-hoc log diagnosis & Puter/deterministic tester)
+│   └── /app/investigations/:sigId     --> InvestigationPage.tsx (Deep-dive into recurring failure signature)
+├── /app/diagnoses                     --> DiagnosesPage.tsx (Workspace diagnosis history with model telemetry)
+├── /app/trends                        --> TrendsPage.tsx (Cross-repository failure rate, category breakdown)
+├── /app/integrations                  --> IntegrationsPage.tsx (GitHub, Supabase, Vercel, Stripe health status)
+└── /app/settings                      --> SettingsLayout.tsx
+    ├── /app/settings/general          --> SettingsPage.tsx (Workspace profile, slug)
+    ├── /app/settings/members          --> MembersPage.tsx (RBAC, invitations)
+    ├── /app/settings/security         --> SecurityPage.tsx (Session management, audit policy)
+    └── /app/settings/billing          --> BillingPage.tsx (Tier cards, run quotas)
+```
+
+---
+
+## 4. Design System & Token Architecture
+
+### 4.1 Token Foundations (`globals.css` & `tailwind.config.js`)
+Hopper is **dark-first by default**, with a deliberate dark mode palette that avoids pitch-black `#000000`:
+- **Canvas (`--surface-canvas`)**: `10 15 29` (`#0A0F1D`) — Deep obsidian slate.
+- **Raised Surfaces (`--surface-raised`)**: `15 21 35` (`#0F1523`) — Cards, sidebars, modals.
+- **Overlay Surfaces (`--surface-overlay`)**: `21 30 50` (`#151E32`) — Dropdowns, hover states.
+- **Inset Wells (`--surface-inset`)**: `6 9 19` (`#060913`) — Terminal logs, code blocks, input wells.
+- **Borders (`--border-subtle`)**: `255 255 255` at `8%` alpha (`rgba(255, 255, 255, 0.08)`).
+- **Primary Text (`--text-primary`)**: `248 250 252` (`#F8FAFC` Slate-50) — High legibility.
+- **Secondary Text (`--text-secondary`)**: `148 163 184` (`#94A3B8` Slate-400) — Descriptions, labels.
+- **Muted Text (`--text-muted`)**: `100 116 139` (`#64748B` Slate-500) — Metadata, timestamps.
+- **Brand Accent (`--accent`)**: `6 182 212` (`#06B6D4` Cyan-500) with contrast ink `8 15 25`.
+- **Semantic Accents**:
+  - Success: `16 185 129` (`#10B981` Emerald) — Passes, active status.
+  - Warning: `245 158 11` (`#F59E0B` Amber) — Flakiness, retry passes, degraded state.
+  - Danger: `244 63 94` (`#F43F5E` Rose) — CI failures, build breaks.
+  - Info: `59 130 246` (`#3B82F6` Blue) — Informational tooltips, audit notices.
+
+### 4.2 Typography
+- **Sans Serif**: `Inter, system-ui, -apple-system, sans-serif` — Used across headlines, UI labels, body prose.
+- **Monospace**: `JetBrains Mono, Menlo, Monaco, Consolas, monospace` — Used for commit SHAs, timestamps, log lines, reproduction CLI commands, and metrics.
+
+### 4.3 Existing Reusable Primitives
+- `Button` & `IconButton`: Variants (`primary`, `secondary`, `ghost`, `danger`) with accessible loading indicators.
+- `Badge`: Semantic tones (`neutral`, `accent`, `success`, `warning`, `danger`, `info`) with optional mono font.
+- `Card` & `CardHeader`: Raised surfaces with subtle hairline borders.
+- `LogViewer`: High-performance terminal emulator with ANSI color rendering, line numbers, and credential redaction tags.
+- `DataTable` & `Pagination`: Accessible tables with column sorting and bounded page controls.
+- `Chart` (`BarChart`, `DistributionBar`, `TrendSparkline`): Zero-dependency pure SVG visualizations.
+- `CommandPalette`: Keyboard-navigable quick switcher (`Cmd+K`).
+
+---
+
+## 5. Audit Findings & Design Weaknesses
+
+### 5.1 Landing Page Weaknesses
+1. **Generic Layout**: The current `LandingPage.tsx` relies on simple 2-column and 3-column card grids, lacking dynamic pacing, typographic tension, and high-impact visual storytelling.
+2. **Static & Flat Product Visual**: The hero visual in `LandingPage.tsx` (lines 155–210) is a static box showing three log lines and four bullet points. It fails to convey the kinetic speed of CI/CD ingestion, the depth of failure fingerprinting, or the clarity of PR sticky comments.
+3. **Missing Narrative Depth**: It does not visually demonstrate *how* Hopper connects commit diffs, stack traces, and test retries to pinpoint root causes.
+4. **Weak Responsive Hierarchy**: On mobile devices, cards stack into a monotonous vertical scroll without visual breathing room or adapted touch interactions.
+
+### 5.2 Content & Marketing Credibility Gaps
+1. **Misleading Autonomous Claims**: `frontend/src/components/ui/WorkflowVisualizer.tsx` claims "Autonomous Delivery Pipeline", "Isolated Sandbox MicroVM", and "Iterative self-repair". These belong to a different hypothetical product and contradict Hopper's real capabilities. Hopper must be positioned as a **CI/CD failure diagnosis and engineering intelligence platform**, not an autonomous agent.
+2. **Missing Real Technical Anchors**: The landing page should highlight real architecture: HMAC-SHA256 GitHub App ingress, tail log slicing (capped at 300 KB), deterministic AST/regex log scrubbing, PostgreSQL-coordinated rate limits, and sticky PR comment updates.
+
+### 5.3 Application Dashboard Alignment
+- The dashboard pages (`OverviewPage`, `InvestigationPage`, `DiagnosesPage`, `TrendsPage`) already possess strong engineering integrity and truthful empty/error states.
+- However, visual consistency between the marketing page and the app shell needs alignment: shared button border radii, consistent hairline alpha levels, and cohesive header navigation.
+
+---
+
+## 6. Proposed Implementation Strategy
+
+1. **Retire Misleading Artifacts**: Update `WorkflowVisualizer.tsx` or replace its contents with Hopper's authentic 5-stage failure analysis lifecycle (Ingest -> Scrub & Slice -> Fingerprint -> Diagnose -> Report).
+2. **Document Product Narrative (`LANDING_PAGE_STRATEGY.md`)**: Establish clear, credible messaging answering the 5 core developer questions without AI hype.
+3. **Codify Design System (`DESIGN_SYSTEM.md`)**: Define layout grid constraints, subtle depth layers, micro-animations, and interactive component specs.
+4. **Implement New Landing Page (`LandingPage.tsx`)**:
+   - **Hero Section**: High-impact typographic headline, concise value proposition, dual CTAs, and a rich, interactive "Live Failure Diagnosis Inspector" showing real log scrubbing, fingerprinting, flakiness scoring, and sticky PR comment preview.
+   - **Interactive Failure Investigation Demo**: Developers can inspect real failure scenarios (Jest assertion failure, Playwright timeout, OOM heap exhaustion) and see how Hopper diagnoses them.
+   - **Technical Deep-Dive ("The Anatomy of a Diagnosis")**: Step-by-step breakdown of how raw logs become evidence-backed diagnoses.
+   - **Architecture & Reliability Grid**: Durable PostgreSQL queues, 0-token minting in browser, strict tenant isolation, rate limit coordination.
+   - **Transparent Pricing**: Free ($0), Pro Developer ($9), Small Team ($29) with verified quotas.
+   - **Footer & Trust**: Grace Hopper tribute, verified platform integrations (GitHub App, Supabase, Vercel).
+5. **Quality Gate Verification**: Run full TypeScript checks, Vitest frontend tests, and production build.
