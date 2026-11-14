@@ -13,16 +13,18 @@ export interface LinkProps
   to?: string;
   href?: string;
   replace?: boolean;
+  prefetch?: boolean;
 }
 
 export const Link = forwardRef<HTMLAnchorElement, LinkProps>(
-  ({ to, href, replace, children, className, ...rest }, ref) => {
+  ({ to, href, replace, prefetch = false, children, className, ...rest }, ref) => {
     const target = to || href || '/';
     return (
       <NextLink
         ref={ref}
         href={target}
         replace={replace}
+        prefetch={prefetch}
         className={className}
         {...rest}
       >
@@ -45,7 +47,7 @@ export interface NavLinkProps
 }
 
 export const NavLink = forwardRef<HTMLAnchorElement, NavLinkProps>(
-  ({ to, href, replace, children, end, className, ...rest }, ref) => {
+  ({ to, href, replace, prefetch = false, children, end, className, ...rest }, ref) => {
     const target = to || href || '/';
     const rawPath = useNextPathname() || '';
     const isActive = end
@@ -67,6 +69,7 @@ export const NavLink = forwardRef<HTMLAnchorElement, NavLinkProps>(
         ref={ref}
         href={target}
         replace={replace}
+        prefetch={prefetch}
         className={computedClass}
         aria-current={isActive ? 'page' : undefined}
         {...rest}

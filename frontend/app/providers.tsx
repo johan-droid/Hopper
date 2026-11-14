@@ -3,7 +3,6 @@
 import React, { useState, Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '../src/components/ui/feedback';
-import { Analytics } from '@vercel/analytics/react';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -28,7 +27,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <Suspense fallback={null}>{children}</Suspense>
-        <Analytics />
       </ToastProvider>
     </QueryClientProvider>
   );

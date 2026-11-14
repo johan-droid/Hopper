@@ -201,7 +201,17 @@ export function createApp(options: CreateAppOptions = {}) {
   // ---------------------------------------------------------------------------
   // Health
   // ---------------------------------------------------------------------------
+  let cachedHealth: { payload: any; timestamp: number } | null = null;
+  const HEALTH_CACHE_TTL_MS = 10_000;
+
   app.get('/api/health', async (_req: Request, res: Response) => {
+    const now = Date.now();
+    if (cachedHealth && (now - cachedHealth.timestamp) < HEALTH_CACHE_TTL_MS && process.env.NODE_ENV !== 'test') {
+      res.setHeader('Cache-Control', 'public, max-age=5, s-maxage=10, stale-while-revalidate=30');
+      res.json(cachedHealth.payload);
+      return;
+    }
+
     const [dbHealth, coordination, queue] = await Promise.all([
       checkDatabaseHealth(),
       checkCoordinationHealth(),
@@ -210,7 +220,7 @@ export function createApp(options: CreateAppOptions = {}) {
 
     const isOverallHealthy = dbHealth.isHealthy && coordination.isHealthy;
 
-    res.json({
+    const payload = {
       status: isOverallHealthy ? 'healthy' : 'degraded',
       service: 'Hopper CI Failure Diagnosis Engine',
       version: '1.0.0',
@@ -232,7 +242,11 @@ export function createApp(options: CreateAppOptions = {}) {
           status: queue.isHealthy ? 'healthy' : 'degraded',
         },
       },
-    });
+    };
+
+    cachedHealth = { payload, timestamp: now };
+    res.setHeader('Cache-Control', 'public, max-age=5, s-maxage=10, stale-while-revalidate=30');
+    res.json(payload);
   });
 
   // ---------------------------------------------------------------------------

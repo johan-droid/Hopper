@@ -12,7 +12,6 @@ import { WorkspaceProvider } from '../features/workspace/WorkspaceProvider';
 import { AppShell } from '../components/layout/AppShell';
 import { RouteErrorBoundary } from '../components/layout/RouteErrorBoundary';
 import { ToastProvider } from '../components/ui/feedback';
-import { Analytics } from '@vercel/analytics/react';
 import { ROUTES } from '../lib/routes';
 import { Skeleton } from '../components/ui/primitives';
 
@@ -114,7 +113,6 @@ const AppRoot: React.FC = () => {
   return (
     <>
       <RouterProvider router={router} />
-      <Analytics />
     </>
   );
 };
