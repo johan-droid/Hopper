@@ -67,14 +67,12 @@ const IntegrationsPage: React.FC = () => {
         : 'Queue health is reported by the API; delivery requires the queue trigger on the deployed function.',
     },
     {
-      name: 'Puter.js AI Engine',
-      purpose: 'Zero-key browser & backend AI inference (DeepSeek V3, Qwen 2.5 Coder, GPT-4o Mini, Gemini)',
+      name: 'AI Gateway (Groq + NVIDIA NIM)',
+      purpose: 'Provider-independent AI inference with failover, circuit breakers, and quota accounting',
       icon: Sparkles,
-      state: typeof window !== 'undefined' && window.puter?.ai ? 'verified' : 'unverified',
+      state: 'unverified',
       detail:
-        typeof window !== 'undefined' && window.puter?.ai
-          ? 'Puter.js SDK loaded and active with browser user-pays allowance.'
-          : 'Puter.js available via CDN and client library.',
+        'Server-side only. Provider keys never reach the browser; availability is confirmed from persisted gateway telemetry.',
     },
     {
       name: 'GitHub App',

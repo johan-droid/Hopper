@@ -60,7 +60,7 @@ const LIFECYCLE_STEPS: PipelineStep[] = [
     title: 'In-Situ Pull Request Diagnosis',
     category: 'Delivery & Action',
     summary: 'Posts structured root-cause explanations and verified code diffs to GitHub.',
-    detail: 'Invokes multi-provider LLM reasoning (Claude 3.5 Haiku, OpenAI GPT-4o-mini, browser Puter.js, or local mock) wrapped in untrusted log boundaries. Upserts a single sticky PR comment without notification noise.',
+    detail: 'Invokes the internal AI gateway (Groq and NVIDIA NIM, with deterministic fallback) wrapped in untrusted log boundaries. Upserts a single sticky PR comment without notification noise.',
     invariant: 'Sticky PR Comment (<!-- ci-doctor-sticky-comment -->)',
     icon: MessageSquare,
   },

@@ -88,22 +88,34 @@ export function validateRuntimeConfig(): RuntimeConfig {
   }
 
   const aiProvider = (process.env.AI_PROVIDER || 'mock').toLowerCase();
-  if (aiProvider !== 'mock' && isProduction) {
-    const hasAnthropic =
-      !!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_API_KEY.includes('mock');
-    const hasOpenAI =
-      !!process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes('mock');
-    const hasPuter =
-      !!process.env.PUTER_AUTH_TOKEN && !process.env.PUTER_AUTH_TOKEN.includes('mock');
-    if (aiProvider === 'anthropic' && !hasAnthropic) {
-      throw new Error('[Hopper] AI provider anthropic selected but no valid ANTHROPIC_API_KEY found');
-    } else if (aiProvider === 'openai' && !hasOpenAI) {
-      throw new Error('[Hopper] AI provider openai selected but no valid OPENAI_API_KEY found');
-    } else if (aiProvider === 'puter' && !hasPuter) {
-      throw new Error('[Hopper] AI provider puter selected but no valid PUTER_AUTH_TOKEN found');
-    } else if (!['anthropic', 'openai', 'puter'].includes(aiProvider)) {
-      throw new Error(`[Hopper] Unsupported AI provider: ${aiProvider}`);
-    }
+  const supportedAiProviders = ['mock', 'groq', 'nvidia-nim', 'anthropic', 'openai'] as const;
+  if (!supportedAiProviders.includes(aiProvider as (typeof supportedAiProviders)[number])) {
+    throw new Error(`[Hopper] Unsupported AI provider: ${aiProvider}`);
+  }
+
+  // Provider keys are server-side only. At least one valid provider key must be
+  // configured in production when AI is enabled; a missing key for the selected
+  // primary provider is survivable because the gateway fails over to any other
+  // configured provider before falling back to deterministic diagnosis.
+  const providerKeyIsValid = (value?: string) =>
+    Boolean(value && !value.includes('mock') && !value.includes('placeholder'));
+  const configuredProviders = supportedAiProviders.filter((provider) => {
+    if (provider === 'mock') return false;
+    if (provider === 'groq') return providerKeyIsValid(process.env.GROQ_API_KEY);
+    if (provider === 'nvidia-nim') return providerKeyIsValid(process.env.NVIDIA_NIM_API_KEY);
+    if (provider === 'anthropic') return providerKeyIsValid(process.env.ANTHROPIC_API_KEY || process.env.AI_API_KEY);
+    return providerKeyIsValid(process.env.OPENAI_API_KEY || process.env.AI_API_KEY);
+  });
+
+  if (aiProvider !== 'mock' && isProduction && configuredProviders.length === 0) {
+    throw new Error(
+      '[Hopper] AI is enabled but no valid provider key found (GROQ_API_KEY, NVIDIA_NIM_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY)'
+    );
+  }
+  if (aiProvider !== 'mock' && configuredProviders.length > 0 && !configuredProviders.includes(aiProvider as (typeof supportedAiProviders)[number])) {
+    warnings.push(
+      `AI provider "${aiProvider}" has no valid API key; the gateway will fail over to: ${configuredProviders.join(', ')}.`
+    );
   }
 
   const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')

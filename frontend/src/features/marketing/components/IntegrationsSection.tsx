@@ -44,20 +44,20 @@ const INTEGRATIONS: IntegrationCard[] = [
     icon: Database,
   },
   {
-    name: 'Puter.js Browser AI Edition',
-    badge: 'Zero-API-Key AI',
+    name: 'AI Gateway: Groq + NVIDIA NIM',
+    badge: 'Provider-Independent AI',
     category: 'Serverless Edge AI',
-    description: 'Enables developers to execute real-time AI diagnoses directly in the browser without entering API keys or credit cards.',
+    description: 'Routes every AI request through one internal gateway with task-aware model selection, failover, and circuit breakers.',
     details: [
-      'Direct access to DeepSeek V3 and Qwen 2.5 Coder 32B',
-      'CORS-free log streaming via puter.net.fetch()',
-      'Cloud KV store and cloud drive export to ~/Hopper/reports/',
+      'Groq OpenAI-compatible API as primary provider',
+      'NVIDIA NIM API Catalog as secondary provider',
+      'Deterministic fallback when every provider is unavailable',
     ],
     icon: Cpu,
   },
   {
     name: 'Anthropic Claude & OpenAI',
-    badge: 'Production LLMs',
+    badge: 'Optional Paid LLMs',
     category: 'Reasoning Providers',
     description: 'Provides structured diagnostic reasoning with strict Zod schema validation and prompt injection defenses.',
     details: [

@@ -14,7 +14,8 @@ graph TD
         GH[GitHub Actions CI]
         USER[Developer Browser]
         ST[Stripe Billing]
-        PUTER[Puter.js Cloud]
+        GROQ[Groq Cloud API]
+        NIM[NVIDIA NIM Catalog]
         LLM[OpenAI / Anthropic]
     end
 
@@ -37,7 +38,8 @@ graph TD
     USER -->|Access App / OAuth / REST API| FE
     FE -->|API Requests & JWT Auth| GW
     ST -->|POST /api/webhooks/stripe| GW
-    FE -.->|Direct In-Browser AI| PUTER
+    GW -->|Inference via AI Gateway| GROQ
+    GW -->|Failover via AI Gateway| NIM
 
     GW -->|HMAC Verify & Dedup| COORD
     GW -->|2. Transactional Enqueue| OB
@@ -117,7 +119,8 @@ Hopper enforces strict **at-least-once delivery** with defense-in-depth idempote
 | **Fingerprinter & Moat** | Token normalization, SHA-256 hash, pgvector | **Implemented** | `backend/src/lib/parser/fingerprinter.ts`, `0002_hnsw_index.sql` |
 | **Flakiness Engine** | Bayesian heuristics across retries and branches | **Implemented** | `backend/src/lib/moat/flakiness-engine.ts`, `backend/tests/flakiness.test.ts` |
 | **AI Diagnosis Engine** | Multi-provider LLM caller + Zod schema validation | **Implemented** | `backend/src/lib/ai/diagnose.ts`, `backend/tests/ai.test.ts` |
-| **Puter.js Integration** | Browser zero-cost AI + backend Puter API bridge | **Implemented** | `frontend/src/lib/puter-ai.ts`, `InvestigationPage.tsx`, `puter/` |
+| **Agentic AI Gateway** | Groq & NVIDIA NIM multi-provider gateway + failover | **Implemented** | `backend/src/lib/ai/gateway/`, `backend/tests/ai-gateway.test.ts` |
+| **Agent Orchestrator** | 6-stage bounded diagnostic workflow with safe tools | **Implemented** | `backend/src/lib/ai/gateway/orchestration/` |
 | **PR Reporter** | Sticky GitHub PR comment upsert with tier gating | **Implemented** | `backend/src/lib/github/pr-reporter.ts`, `backend/tests/pr-reporter.test.ts` |
 | **Workspace & RLS** | Multi-tenant organization & workspace hierarchy | **Implemented** | `backend/src/server/routes/workspaces.ts`, `0005_rls_policies.sql`, `0011_*.sql` |
 | **Stripe Billing** | Checkout session & subscription lifecycle webhooks | **Implemented** | `backend/src/server/routes/billing.ts`, `backend/tests/stripe-billing.test.ts` |

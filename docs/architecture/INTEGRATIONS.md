@@ -63,59 +63,84 @@ graph TD
 
 ---
 
-## 2. Puter.js Integration (Zero-API-Key AI)
+## 2. Multi-Provider Agentic AI Gateway (Groq & NVIDIA NIM)
 
-Hopper features a first-class integration with **Puter.js**, enabling zero-cost AI execution, client-side persistence, and browser-driven diagnostic sandboxes.
+Hopper implements an enterprise-grade, provider-independent **AI Gateway** located at `backend/src/lib/ai/gateway/`. Application services never invoke AI providers directly; all requests pass through `aiGateway.execute(task, input, context)`.
 
 ```mermaid
 graph TD
-    subgraph Browser ["Developer Browser"]
-        REACT[Hopper React SPA]
-        PUTER_SDK[Puter.js v2 Client SDK]
+    TASK[Task Request: failure.diagnose] --> ROUTER[Task-Aware Model Router]
+    ROUTER --> CHAIN[Provider Failover Chain]
+    
+    subgraph Gateways ["Resilience & Governance Layer"]
+        CHAIN --> CB[Circuit Breaker: CLOSED / OPEN / HALF-OPEN]
+        CB --> BH[Bulkhead Concurrency Limiter]
+        BH --> QM[Quota Manager & Budget Reservation]
     end
-
-    subgraph PuterCloud ["Puter.js Platform Services"]
-        AI_GATEWAY[Puter AI Chat Gateway]
-        KV_STORE[Puter Cloud Key-Value Store]
-        FS_DRIVE[Puter Cloud Drive: ~/Hopper/reports/]
-        HOSTING[Puter Static Hosting]
+    
+    subgraph Providers ["Provider Transports (OpenAI-Compatible)"]
+        QM -->|Primary| GROQ[Groq Cloud API · api.groq.com/openai/v1]
+        QM -->|Failover 1| NIM[NVIDIA NIM Catalog · integrate.api.nvidia.com/v1]
+        QM -->|Optional Paid| PAID[Anthropic Claude / OpenAI]
+        QM -->|Final Fallback| DET[Deterministic Heuristic Engine]
     end
-
-    REACT -->|Interactive Diagnosis| PUTER_SDK
-    PUTER_SDK -->|Streaming Tokens: DeepSeek / Qwen / GPT-4o| AI_GATEWAY
-    PUTER_SDK -->|Store Signatures & Counts| KV_STORE
-    PUTER_SDK -->|Export Repro Scripts| FS_DRIVE
-    PUTER_SDK -->|1-Click Cloud Deploy| HOSTING
+    
+    GROQ --> VAL[Output Validator & Schema Guard]
+    NIM --> VAL
+    PAID --> VAL
+    DET --> VAL
+    VAL --> TEL[(ai_gateway_requests · Telemetry Sink)]
 ```
 
-### 2.1 Key Capabilities of Puter.js Edition
-1. **Zero-API-Key AI Reasoning:** Calls `puter.ai.chat(prompt, { model, stream: true })` directly from the client. Supports top open-weights and commercial models without requiring private API keys:
-   - DeepSeek V3 (`deepseek-chat`)
-   - Qwen 2.5 Coder 32B (`qwen/qwen-2.5-coder-32b-instruct`)
-   - OpenAI GPT-4o-mini (`gpt-4o-mini`)
-   - Google Gemini 1.5 Flash (`google/gemini-1.5-flash`)
-2. **CORS-Free Ingress:** Uses `puter.net.fetch()` to retrieve raw logs directly from `api.github.com` without needing a dedicated backend proxy.
-3. **Puter KV Moat:** Stores deduplicated failure hashes and occurrence frequencies directly in Puter's serverless key-value store.
-4. **Interactive Sandbox (`InvestigationPage.tsx`):** Developers can toggle between backend server-side diagnosis and client-side Puter AI execution, inspecting prompt formatting and comparing model outputs in real time.
+### 2.1 Supported Providers & Models
+1. **Groq Cloud API (Primary Free Provider):**
+   - High-throughput inference powered by LPU hardware.
+   - Official OpenAI-compatible endpoint: `https://api.groq.com/openai/v1`.
+   - Production models: `openai/gpt-oss-120b`, `openai/gpt-oss-20b`.
+   - Preview/experimental models: `qwen/qwen3.8-27b`, `minimaxai/minimax-m2.7`.
+   - Verified capabilities: JSON mode (`response_format: { type: "json_object" }`), tool calling, `reasoning_effort`.
+2. **NVIDIA NIM API Catalog (Secondary Failover Provider):**
+   - Hosted models in the NVIDIA API Catalog at `https://integrate.api.nvidia.com/v1`.
+   - Catalog models: `nvidia/nemotron-3-super-120b-a12b`, `nvidia/nemotron-3.5-lightning-30b-a3b`, `qwen/qwen3-next-80b-a3b-instruct`, `meta/llama-3.3-70b-instruct`.
+   > [!NOTE]
+   > **NVIDIA Licensing Notice:** Free endpoints in the NVIDIA Developer API Catalog are intended strictly for prototyping, research, and evaluation. They do not carry a commercial enterprise SLA. Hopper uses NVIDIA NIM as an evaluation-tier secondary failover with guaranteed deterministic local fallback behind it.
+3. **Anthropic Claude & OpenAI (Optional Paid Providers):**
+   - Strictly opt-in (`AI_ENABLE_PAID_FALLBACK=false` by default).
+   - Never auto-selected in free tiers unless explicitly authorized.
+4. **Deterministic Heuristic Synthesizer (Zero-Failure Fallback):**
+   - 10-category error classification heuristic engine.
+   - Guarantees valid `DiagnosisOutput` even during total cloud outages or missing API keys.
+
+### 2.2 Bounded Agentic Diagnostic Orchestration
+Hopper coordinates diagnostic reasoning across a 6-stage bounded workflow (`AgentOrchestrator`):
+- **Stage 1 (Failure Understanding):** Extracts verified facts into a structured ledger.
+- **Stage 2 (Evidence Analysis):** Executes safe read-only tools (`get_sanitized_log_excerpt`) to slice relevant error lines.
+- **Stage 3 (Historical Intelligence):** Evaluates flakiness score and prior run occurrences (`get_historical_occurrences`, `get_flakiness_statistics`).
+- **Stage 4 (Diagnosis Synthesis):** Synthesizes structured diagnosis via the central AI Gateway.
+- **Stage 5 (Output Verification):** Enforces Zod schema compliance, verifies cited log lines exist in the log snippet, and triggers a bounded 1-attempt repair policy for malformed JSON.
+- **Stage 6 (Reporting Handoff):** Persists telemetry and prepares pull request comments.
+- **Strict Bounds:** Max 5 model calls, 4 iterations, 16k tokens, 60s deadline, 8 tool calls. Sandboxed tools with no network mutations or shell execution.
 
 ---
 
-## 3. Multi-Provider AI Architecture
+## 3. Multi-Provider AI Architecture & Safety
 
-Server-side diagnosis (`backend/src/lib/ai/diagnose.ts`) supports multiple LLM providers managed by a strict runtime configuration:
+Server-side diagnosis (`backend/src/lib/ai/diagnose.ts`) supports multiple LLM providers managed by the central gateway:
 
 ```mermaid
 graph LR
     INPUT[Sanitized Log Snippet] --> PROMPT[Prompt Formatter <UNTRUSTED_CI_LOG>]
     PROMPT --> ROUTER{AI_PROVIDER}
-    ROUTER -->|mock| MOCK[Deterministic Mock Engine]
+    ROUTER -->|mock / deterministic| MOCK[Deterministic Mock Engine]
+    ROUTER -->|groq| GROQ_GW[Groq AI Gateway]
+    ROUTER -->|nvidia-nim| NIM_GW[NVIDIA NIM Gateway]
     ROUTER -->|anthropic| CLAUDE[Claude 3.5 Haiku]
     ROUTER -->|openai| GPT[GPT-4o-mini]
-    ROUTER -->|puter| PUTER_API[Puter API Bridge]
     MOCK --> ZOD[Zod Schema Validation]
+    GROQ_GW --> ZOD
+    NIM_GW --> ZOD
     CLAUDE --> ZOD
     GPT --> ZOD
-    PUTER_API --> ZOD
     ZOD --> REPORT[DiagnosticReport]
 ```
 

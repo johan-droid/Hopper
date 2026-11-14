@@ -16,7 +16,7 @@ Hopper solves this by:
 3. **Streaming, slicing, and scrubbing raw logs** (capping extraction at tail 300 KB, stripping ANSI codes, and scrubbing sensitive credentials like AWS keys, GitHub tokens, and database URIs).
 4. **Fingerprinting failures** by normalizing volatile tokens (UUIDs, memory addresses, timestamps, file line numbers) into canonical SHA-256 signatures to collapse repeated occurrences.
 5. **Detecting and scoring flakiness** across commit SHAs, retries, and branches using Bayesian heuristics.
-6. **Generating root-cause diagnoses** with actionable fixes via AI reasoning (supporting Anthropic Claude, OpenAI, zero-API-key in-browser Puter.js, or deterministic local mock fallback).
+6. **Generating root-cause diagnoses** with actionable fixes via AI reasoning (supporting Groq API, NVIDIA NIM Catalog, Anthropic Claude, OpenAI, or deterministic local mock fallback).
 7. **Posting sticky pull-request comments** with gated tier teasers, preventing PR noise by continuously updating a single diagnostic comment.
 
 Hopper is **not** a generic CI/CD dashboard, **not** a generic chatbot, and **not** a task runner clone. It is a specialized, high-precision intelligence layer for CI failure diagnosis.
@@ -52,8 +52,8 @@ The repository is structured as an npm workspaces monorepo:
 | **Backend API** | Node.js 20+, Express 4, TypeScript, Zod | `backend/` (entry: `backend/src/server/app.ts`, `backend/src/server/index.ts`) |
 | **Database & Search** | PostgreSQL 16 with `pgvector` extension (Supabase in production, Docker in dev) | `backend/supabase/migrations/0001_initial_schema.sql` .. `0013_*.sql` |
 | **Queue & Outbox** | PostgreSQL durable outbox (`hopper_job_queue`, `hopper_job_dead_letters`) + Vercel Queues push delivery | `backend/src/queue/` (`job-store.ts`, `consumer.ts`, `transport.ts`) |
-| **AI Intelligence** | Multi-provider router: Mock (default), Anthropic, OpenAI, Puter.js | `backend/src/lib/ai/` (`diagnose.ts`, `budget-controller.ts`, `embeddings.ts`) |
-| **Puter.js Integration** | Browser zero-cost AI execution across DeepSeek V3, Qwen 2.5 Coder, GPT-4o-mini | `frontend/src/lib/puter-ai.ts`, `frontend/src/features/investigations/InvestigationPage.tsx`, `puter/` |
+| **AI Intelligence** | Multi-provider Agentic AI Gateway: Groq (Primary), NVIDIA NIM (Secondary), Anthropic, OpenAI, Deterministic Fallback | `backend/src/lib/ai/gateway/`, `backend/src/lib/ai/diagnose.ts` |
+| **Agent Orchestrator** | 6-stage bounded diagnostic orchestrator with safe read-only tools and line-grounded validation | `backend/src/lib/ai/gateway/orchestration/` |
 | **Authentication** | GitHub OAuth (session JWTs with HMAC-signed serverless state) + Supabase Auth | `backend/src/server/routes/auth.ts`, `backend/src/server/middleware/auth.ts` |
 | **Billing** | Stripe subscription webhook & checkout integration ($0 Free, $9 Pro, $29 Team) | `backend/src/server/routes/billing.ts`, `backend/src/lib/billing/` |
 | **Hosting & Ingress** | Vercel multi-service routing (`services: { backend, frontend }` in `vercel.json`) | `vercel.json` |
@@ -73,7 +73,8 @@ docs/
 │   ├── SYSTEM_OVERVIEW.md              # System topology, event flows, and delivery guarantees
 │   ├── ARCHITECTURE.md                 # Backend & frontend structural design and subsystems
 │   ├── DATA_MODEL.md                   # Complete database schema, ERD, RLS policies, functions
-│   └── INTEGRATIONS.md                 # GitHub App, Stripe, Puter.js, Vercel, and AI providers
+│   ├── INTEGRATIONS.md                 # GitHub App, Stripe, Groq, NVIDIA NIM, Vercel, and AI providers
+│   └── AI_GATEWAY.md                   # Multi-provider AI gateway, routing, resilience, and orchestrator
 ├── development/
 │   ├── GETTING_STARTED.md              # Prerequisites, local environment setup, and CLI tools
 │   ├── DEVELOPMENT_GUIDELINES.md       # Coding conventions, API standards, and migration policy

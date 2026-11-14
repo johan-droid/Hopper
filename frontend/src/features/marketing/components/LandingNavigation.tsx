@@ -73,14 +73,6 @@ export const LandingNavigation: React.FC = () => {
           <a href="#pricing" className="transition-colors hover:text-white">
             Pricing
           </a>
-          <a
-            href="/puter/"
-            className="flex items-center gap-1 text-rose-400 hover:text-rose-300 transition-colors font-mono"
-            title="Zero-cost in-browser AI edition powered by Puter.js"
-          >
-            <span>Puter AI</span>
-            <span className="text-[9px] px-1 py-0.5 rounded bg-rose-500/10 border border-rose-500/30">Free</span>
-          </a>
         </nav>
 
         {/* Action Buttons */}
@@ -170,14 +162,6 @@ export const LandingNavigation: React.FC = () => {
               onClick={() => setMobileMenuOpen(false)}
             >
               Pricing
-            </a>
-            <a
-              href="/puter/"
-              className="py-1.5 transition-colors text-rose-400 flex items-center justify-between"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <span>Puter AI Browser Edition</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300">Free</span>
             </a>
 
             <div className="pt-3 border-t border-hairline flex flex-col gap-2">

@@ -32,10 +32,9 @@ Hopper/
 │   │   ├── components/               # UI design system primitives & layout shells
 │   │   ├── features/                 # Domain pages: overview, failures, diagnoses, trends,
 │   │   │                             # investigations, repositories, settings, auth, marketing
-│   │   ├── lib/                      # Puter AI integration, route helpers, formatters, filters
+│   │   ├── lib/                      # Route helpers, formatters, filters, auth clients
 │   │   └── store/                    # Zustand client application store (useAppStore.ts)
 │   └── tests/                        # Vitest & Playwright E2E suites (34 tests)
-├── puter/                            # Standalone Puter.js serverless zero-database app
 ├── scripts/                          # Local orchestration, doctor, infra, recovery scripts
 ├── docs/                             # Authoritative technical documentation
 ├── vercel.json                       # Multi-service routing configuration
@@ -144,7 +143,7 @@ graph TD
     D --> E[Fingerprinter: mask UUIDs, memory hex, line numbers]
     E --> F[SHA-256 Hasher: canonical failure signature hash]
     F --> G[Bayesian Flakiness Engine: score flakiness across retries & PRs]
-    G --> H[Multi-Provider AI: Claude / OpenAI / Puter / Mock]
+    G --> H[Multi-Provider AI Gateway: Groq / NVIDIA NIM / Claude / OpenAI / Mock]
     H --> I[Zod Validation: enforce structured DiagnosisOutput schema]
     I --> J[PR Reporter: upsert sticky comment on GitHub Pull Request]
 ```
@@ -186,7 +185,7 @@ The frontend is a modern web application built with Next.js 14 (App Router), Rea
 - `src/features/`: Feature modules:
   - `overview/`: Failure metrics, flakiness leaderboards, health telemetry.
   - `failures/`: Individual CI run execution view with log viewer.
-  - `investigations/`: Interactive sandbox supporting both backend API diagnosis and client-side Puter.js AI model execution.
+  - `investigations/`: Interactive sandbox supporting ad-hoc log diagnosis, sample replay, and real-time structured analysis inspection.
   - `diagnoses/`: Historical diagnostic report feed.
   - `trends/`: Time-series failure volume and flakiness trends.
   - `repositories/`: Connected repositories and failure feeds.

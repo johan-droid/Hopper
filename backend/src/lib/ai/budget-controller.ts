@@ -56,23 +56,52 @@ export const PRICING_REGISTRY: Record<string, ModelPricing> = {
     cacheWritePerMillion: 1.25,
     cacheReadPerMillion: 1.25,
   },
-  'deepseek-chat': {
-    inputPerMillion: 0.14,
-    outputPerMillion: 0.28,
-    cacheWritePerMillion: 0.14,
-    cacheReadPerMillion: 0.014,
+  // Groq (https://console.groq.com/docs/models — published per-1M-token prices)
+  'openai/gpt-oss-120b': {
+    inputPerMillion: 0.15,
+    outputPerMillion: 0.60,
+    cacheWritePerMillion: 0.15,
+    cacheReadPerMillion: 0.075,
   },
-  'qwen-2.5-coder-32b-instruct': {
-    inputPerMillion: 0.20,
-    outputPerMillion: 0.40,
-    cacheWritePerMillion: 0.20,
-    cacheReadPerMillion: 0.02,
-  },
-  'gemini-1.5-flash': {
+  'openai/gpt-oss-20b': {
     inputPerMillion: 0.075,
     outputPerMillion: 0.30,
     cacheWritePerMillion: 0.075,
-    cacheReadPerMillion: 0.01875,
+    cacheReadPerMillion: 0.0375,
+  },
+  'qwen/qwen3.8-27b': {
+    inputPerMillion: 0.80,
+    outputPerMillion: 4.00,
+    cacheWritePerMillion: 0.80,
+    cacheReadPerMillion: 0.40,
+  },
+  // Groq preview/enterprise model: token price is ContactSales (contract-billed),
+  // so token-metered spend through this ledger is $0. Availability is account-dependent.
+  'minimaxai/minimax-m2.7': {
+    inputPerMillion: 0,
+    outputPerMillion: 0,
+    cacheWritePerMillion: 0,
+    cacheReadPerMillion: 0,
+  },
+  // NVIDIA NIM API Catalog evaluation endpoints: $0 token-metered usage while the
+  // free developer catalog tier is active. Not guaranteed production capacity.
+  'nvidia/nemotron-3-super-120b-a12b': {
+    inputPerMillion: 0,
+    outputPerMillion: 0,
+    cacheWritePerMillion: 0,
+    cacheReadPerMillion: 0,
+  },
+  'nvidia/nemotron-3.5-lightning-30b-a3b': {
+    inputPerMillion: 0,
+    cacheWritePerMillion: 0,
+    cacheReadPerMillion: 0,
+    outputPerMillion: 0,
+  },
+  'qwen/qwen3-next-80b-a3b-instruct': {
+    inputPerMillion: 0,
+    outputPerMillion: 0,
+    cacheWritePerMillion: 0,
+    cacheReadPerMillion: 0,
   },
 };
 
@@ -138,7 +167,9 @@ export class AiBudgetController {
    */
   async reserveBudget(params: ReserveBudgetParams): Promise<BudgetReservationResult> {
     const pricing = PRICING_REGISTRY[params.model];
-    const isFreeTierProvider = params.provider === 'mock' || params.provider === 'puter';
+    // Only the offline mock provider bypasses priced reservations; every live
+    // provider (Groq, NVIDIA NIM, Anthropic, OpenAI) reserves real budget.
+    const isFreeTierProvider = params.provider === 'mock';
     if (!pricing && !isFreeTierProvider) {
       return {
         allowed: false,

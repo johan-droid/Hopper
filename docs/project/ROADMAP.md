@@ -9,7 +9,7 @@ The Hopper development roadmap tracks the evolution of the platform from local p
 ```mermaid
 flowchart LR
     P1["Phase 1: Engine Baseline<br/>(COMPLETED)"] --> P2["Phase 2: Vercel & Outbox<br/>(COMPLETED)"]
-    P2 --> P3["Phase 3: AI & Puter.js<br/>(COMPLETED)"]
+    P2 --> P3["Phase 3: AI Gateway & Groq/NIM<br/>(COMPLETED)"]
     P3 --> P4["Phase 4: Consolidation<br/>(ACTIVE)"]
     P4 --> P5["Phase 5: Cloud Provisioning<br/>(NEXT)"]
     P5 --> P6["Phase 6: Auto-Fix PRs<br/>(FUTURE)"]
@@ -38,14 +38,14 @@ flowchart LR
 - [x] Consolidated Express app factory (`createApp`) for local and serverless execution.
 - [x] Automated test suite expanded to 183 tests.
 
-### Phase 3: Multi-Provider AI & Puter.js Integration (COMPLETED)
-- [x] Implemented multi-provider AI router supporting Anthropic Claude, OpenAI, and deterministic Mock.
-- [x] Built Puter.js zero-API-key integration for client-side AI chat (DeepSeek V3, Qwen 2.5 Coder, GPT-4o-mini).
-- [x] Embedded Puter AI execution into the primary React SPA (`InvestigationPage.tsx`).
+### Phase 3: Multi-Provider Agentic AI Gateway (COMPLETED)
+- [x] Implemented provider-independent AI Gateway (`aiGateway.execute`) with Groq (Primary) and NVIDIA NIM (Secondary).
+- [x] Built resilience layer: circuit breaker, bulkhead concurrency limiter, exponential backoff with jitter and `Retry-After`.
+- [x] Implemented 6-stage bounded diagnostic orchestrator with safe read-only tools and log line grounding.
 - [x] Built $500 monthly AI budget controller with admission control and token ledgers.
 - [x] Implemented cryptographically signed HMAC OAuth state verification for serverless auth flows.
 - [x] Denormalized `workspace_id` onto leaf tables (`0011`) for optimized Row-Level Security evaluation.
-- [x] Automated test suite expanded to 226 backend tests and 34 frontend tests (100% passing).
+- [x] Automated test suite expanded to 246 backend tests and 34 frontend tests (100% passing).
 
 ### Phase 4: Repository Consolidation & Single-Agent Governance (CURRENT)
 - [x] Establish single primary AI development agent model (`AGENTS.md`).

@@ -95,11 +95,6 @@ export const LandingFooter: React.FC = () => {
                   Control Plane State
                 </a>
               </li>
-              <li>
-                <a href="/puter/" className="hover:text-white transition-colors text-rose-400">
-                  Puter AI Edition
-                </a>
-              </li>
             </ul>
           </div>
 

@@ -12,7 +12,8 @@
 | **Vercel** | Hobby (Free) | • Free edge/web hosting<br>• Node.js Serverless Functions (up to 60s max execution)<br>• 1024 MB function RAM<br>• Custom domains & automatic TLS | • Non-commercial personal evaluation use only<br>• Vercel Queues are non-standard on Hobby; PostgreSQL outbox acts as the durable queue |
 | **Supabase** | Free Tier | • 500 MB PostgreSQL database<br>• 50,000 Monthly Active Users (Auth)<br>• Row Level Security (RLS)<br>• 5 GB egress/month | • Projects pause after 7 days of inactivity (can be unpaused via dashboard)<br>• Connection limits managed via connection pooling |
 | **GitHub** | Free Developer | • Unlimited public repo GitHub Actions<br>• 2,000 private repo Actions minutes/month<br>• GitHub OAuth & GitHub Apps (zero cost)<br>• Webhook ingress | • Rate limit: 5,000 requests/hour for authenticated API tokens |
-| **Puter.js** | Free Developer Tier | • Free user-pays allowance across 977 catalog models (DeepSeek V3, Qwen 2.5 Coder, GPT-4o Mini, Gemini 1.5 Flash)<br>• Free cloud hosting (`*.puter.site`)<br>• Puter KV & Drive storage | • Background webhook jobs cannot access a user's browser Puter session unless a service token is provided |
+| **Groq Cloud** | Free Developer Tier | • High-speed LPU inference across open-weights models (GPT-OSS, Qwen, Minimax)<br>• Official OpenAI-compatible endpoint (`api.groq.com`)<br>• Zero-cost API token usage within free rate limits | • Rate limit: 30 requests/minute on standard free tier; circuit breaker handles 429 failover |
+| **NVIDIA NIM** | API Catalog (Free Eval) | • Evaluation endpoints across leading models (Nemotron 3, Llama 3.3, Qwen)<br>• Official OpenAI-compatible endpoint (`integrate.api.nvidia.com`) | • Evaluation-tier capacity under NVIDIA Developer Program terms (not guaranteed SLA); failover behind Groq |
 | **React Bits** | Open-Source | • Free UI components and animations (MIT License) | • No Pro registry, paid agent kits, or license-key dependencies |
 
 ---

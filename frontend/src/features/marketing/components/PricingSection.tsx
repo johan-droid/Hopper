@@ -32,7 +32,7 @@ const TIERS: PricingTier[] = [
       'Basic sticky PR comment diagnosis',
       'ANSI stripping & secret scrubbing',
       'Preview flakiness teaser',
-      'Puter.js zero-cost AI access',
+      'Gateway AI diagnosis (Groq / NVIDIA NIM free tier)',
     ],
     ctaText: 'Get Started Free',
     ctaVariant: 'secondary',

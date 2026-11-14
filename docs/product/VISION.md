@@ -39,7 +39,7 @@ Hopper is purpose-built for engineering teams using GitHub Actions for their del
 - **Sub-15-Second Diagnosis:** Ingests webhook events, slices the log, identifies the failure signature, and generates a structured root-cause analysis before the developer switches context.
 - **The Historical Moat (Failure Signatures):** Hashes normalized stack traces (SHA-256) and clusters them in PostgreSQL with `pgvector`. Hopper remembers every error ever seen across the repository, tracking its recurrence count, branch frequency, and Bayesian flakiness score.
 - **Sticky PR Reporting:** Delivers diagnoses directly where developers work — as a single, cleanly formatted sticky comment on the pull request that updates automatically across re-runs.
-- **Zero-Cost & Low-Cost AI Execution:** Delivers high-precision LLM reasoning via flexible provider backends, including zero-API-key client-side execution via Puter.js (DeepSeek V3, Qwen 2.5 Coder) alongside Anthropic Claude and OpenAI.
+- **Zero-Cost & Low-Cost AI Execution:** Delivers high-precision LLM reasoning via an agentic multi-provider gateway powered by Groq and NVIDIA NIM alongside Anthropic Claude, OpenAI, and deterministic heuristic synthesis.
 
 ---
 
@@ -80,15 +80,15 @@ Hopper is purpose-built for engineering teams using GitHub Actions for their del
   - Confidence Score (0.0 to 1.0).
   - Suggested Code Fix (Markdown + Unified Diff).
   - Prevention / Next Steps Checklist.
-- Dual execution paths:
-  - **Server-Side Engine:** Scalable background processing with Anthropic Claude, OpenAI, Puter API, or deterministic local mock.
-  - **In-Browser Puter Engine:** Client-side zero-API-key execution leveraging Puter.js allowance (DeepSeek V3, Qwen 2.5 Coder, GPT-4o-mini).
+- Unified AI Gateway execution:
+  - **Server-Side Agentic Engine:** Multi-provider gateway with Groq (Primary), NVIDIA NIM (Secondary), Anthropic Claude, OpenAI, and deterministic heuristic fallback.
+  - **Bounded Agent Orchestrator:** 6-stage structured diagnostic workflow enforcing log-grounded line verification and strict resource ceilings.
 
 ### 6.4 Developer Workspace & Dashboard
 - Authenticated React SPA providing:
   - **Overview Dashboard:** Failure volume metrics, flakiness score distributions, and top recurring signature leaderboards.
   - **Failure Details:** Deep inspection of individual CI runs with side-by-side log view, signature timeline, and diagnosis report.
-  - **Interactive Investigation Sandbox:** Ad-hoc log diagnosis tool allowing engineers to paste raw logs or select test samples, compare backend and Puter AI models, and inspect structured outputs.
+  - **Interactive Investigation Sandbox:** Ad-hoc log diagnosis tool allowing engineers to paste raw logs or select test samples, test failure signatures, and inspect structured outputs.
   - **Repository & Workspace Management:** Multi-tenant workspace hierarchy with role-based member permissions (`owner`, `admin`, `developer`, `viewer`).
   - **Billing & Subscription Management:** Tier status, run limits, and upgrade flows.
 

@@ -40,10 +40,10 @@
 - **Impact:** Terminal failures could be silently lost if not explicitly intercepted.
 - **Mitigation:** Hopper manages its own dead-letter ledger in PostgreSQL (`hopper_job_dead_letters`). When a job exhausts `max_attempts` (default 5), `hopper_fail_job` atomically transitions the row into `hopper_job_dead_letters` with full payload and error stack traces.
 
-### LIMIT-003: Local Offline Runs Rely on Mock AI by Default
-- **Description:** For out-of-the-box local developer convenience, `AI_PROVIDER` defaults to `mock`.
-- **Impact:** Diagnostic outputs from the ad-hoc API in local dev return synthetic test diagnoses rather than live LLM completions unless `PUTER_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` is provided.
-- **Mitigation:** Developers can use the in-browser Puter AI option in `InvestigationPage.tsx` for real-time live LLM completions (DeepSeek V3, Qwen 2.5 Coder) without configuring any backend API keys.
+### LIMIT-003: Local Offline Runs Rely on Mock / Deterministic AI by Default
+- **Description:** For out-of-the-box local developer convenience, `AI_PROVIDER` can run offline without external API keys.
+- **Impact:** Diagnostic outputs from the ad-hoc API in local dev return deterministic heuristic diagnoses rather than live LLM completions unless `GROQ_API_KEY` or `NVIDIA_NIM_API_KEY` is provided.
+- **Mitigation:** Developers can configure a free Groq API key (`GROQ_API_KEY`) or NVIDIA NIM key (`NVIDIA_NIM_API_KEY`) in `.env` to enable live multi-provider inference with automatic failover. Deterministic fallback ensures no breakage when offline.
 
 ---
 

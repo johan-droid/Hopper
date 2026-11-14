@@ -99,7 +99,6 @@ Once `npm run dev` is running, access the following services:
 | **Frontend Application** | <http://localhost:3000> (or Vercel port) | Next.js App Router dashboard, investigation sandbox, failure feeds |
 | **Backend API Gateway** | <http://localhost:3000> | Express API gateway root |
 | **System Health Check** | <http://localhost:3000/api/health> | Health status of DB, coordination, and queue |
-| **Puter.js Serverless Edition** | <http://localhost:3000/puter/> | Standalone browser-based Puter AI edition |
 
 ---
 

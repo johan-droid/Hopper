@@ -78,19 +78,23 @@ required, and **no Cloudflare variable exists**.
 > Production boot throws if `GITHUB_APP_WEBHOOK_SECRET` or
 > `GITHUB_APP_PRIVATE_KEY` is missing.
 
-## 6. AI providers
+## 6. AI providers & Gateway
 
 | Variable | Purpose | Required | Scope | Env | Secret | Source |
 |---|---|---|---|---|---|---|
-| `AI_PROVIDER` | Provider: `puter`, `openai`, `anthropic`, or `mock` | Yes | BE | All | No | You (`mock` by default) |
-| `AI_MODEL` | Model id for the selected provider | Yes | BE | All | No | e.g. `deepseek-chat`, `gpt-4o-mini`, `claude-3-5-haiku-20241022` |
+| `AI_PROVIDER` | Provider: `groq` (default), `nvidia-nim`, `openai`, `anthropic`, or `mock` | Yes | BE | All | No | You (`groq` by default) |
+| `AI_MODEL` | Model override for the selected provider | No | BE | All | No | e.g. `openai/gpt-oss-120b`, `nvidia/nemotron-3-super-120b-a12b` |
+| `GROQ_API_KEY` | Groq Cloud API key (primary free tier inference) | If `AI_PROVIDER=groq` | BE | All | **Yes** | GroqCloud Console |
+| `NVIDIA_NIM_API_KEY` | NVIDIA NIM Catalog API key (secondary failover inference) | If `AI_PROVIDER=nvidia-nim` | BE | All | **Yes** | NVIDIA API Catalog |
 | `EMBEDDING_MODEL` | Embedding model; must stay 1536-dim for pgvector | No (`text-embedding-3-small`) | BE | All | No | OpenAI |
-| `PUTER_AUTH_TOKEN` | Puter background API token (browser uses free user allowance) | If `AI_PROVIDER=puter` (backend) | BE | All | **Yes** | Puter account settings |
-| `OPENAI_API_KEY` | OpenAI key (diagnosis + embeddings) | If `AI_PROVIDER=openai` | BE | All | **Yes** | OpenAI dashboard |
-| `ANTHROPIC_API_KEY` | Anthropic key | If `AI_PROVIDER=anthropic` | BE | All | **Yes** | Anthropic console |
+| `OPENAI_API_KEY` | OpenAI key (optional paid provider + embeddings) | If using OpenAI | BE | All | **Yes** | OpenAI dashboard |
+| `ANTHROPIC_API_KEY` | Anthropic key (optional paid provider) | If using Anthropic | BE | All | **Yes** | Anthropic console |
+| `AI_ENABLE_GROQ` | Enable/disable Groq provider in gateway | No (`true`) | BE | All | No | Gateway config |
+| `AI_ENABLE_NVIDIA_NIM` | Enable/disable NVIDIA NIM provider in gateway | No (`true`) | BE | All | No | Gateway config |
+| `AI_ENABLE_PAID_FALLBACK` | Allow gateway to fail over to paid providers | No (`false`) | BE | All | No | Security/cost policy |
 | `AI_MONTHLY_BUDGET_USD` | Monthly AI spend ceiling enforced by the ledger | No (`500`) | BE | All | No | Policy |
-| `AI_REQUEST_TIMEOUT_MS` | Per-request timeout | No (`15000`) | BE | All | No | Tuning |
-| `AI_RETRY_INITIAL_DELAY_MS` | Bounded retry base delay | No (`500`) | BE | All | No | Tuning |
+| `AI_REQUEST_TIMEOUT_MS` | Per-request timeout | No (`30000`) | BE | All | No | Tuning |
+| `AI_RETRY_INITIAL_DELAY_MS` | Bounded retry base delay | No (`250`) | BE | All | No | Tuning |
 
 > There is **no** `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`,
 > `CLOUDFLARE_WORKER_AI_URL`, `EMBEDDING_MODEL=@cf/...`. Those are retired.

@@ -44,18 +44,20 @@ This index records all authoritative architectural decisions made in the Hopper 
 
 ---
 
-### ADR-004: Multi-Provider AI Architecture with Browser Puter.js & Mock Default
-- **Status:** **APPROVED & IMPLEMENTED**
+### ADR-004: Multi-Provider Agentic AI Gateway (Groq & NVIDIA NIM; Rejection of Puter.js)
+- **Status:** **APPROVED & IMPLEMENTED** (Supersedes prior browser Puter.js architecture)
 - **Date:** November 2026
-- **Context:** Hard-coding a single commercial AI provider (e.g. Anthropic or OpenAI) prevents zero-cost local testing and blocks users without funded developer accounts.
-- **Decision:** Build a multi-provider router supporting:
-  1. `mock` (default for fast, deterministic local offline testing).
-  2. `anthropic` (Claude 3.5 Haiku) and `openai` (GPT-4o-mini).
-  3. `puter` (in-browser zero-API-key execution via Puter.js allowance across DeepSeek V3 and Qwen 2.5 Coder).
+- **Context:** Hard-coding a single commercial AI provider (e.g. Anthropic or OpenAI) prevents zero-cost local testing and blocks users without funded developer accounts. A previous prototype evaluated Puter.js for browser-based AI, but Puter.js proved unsuitable for production backend CI/CD failure diagnosis: background webhook jobs could not access client sessions, rate limits were non-deterministic, structured JSON output was unverified, and dangling dependencies fragmented the codebase.
+- **Decision:** Permanently purge Puter.js and build a resilient server-side **Multi-Provider AI Gateway** (`backend/src/lib/ai/gateway/`):
+  1. `groq` (Primary high-speed free provider via OpenAI-compatible endpoint).
+  2. `nvidia-nim` (Secondary evaluation-tier catalog failover via OpenAI-compatible endpoint).
+  3. `anthropic` and `openai` (strictly opt-in paid providers; never auto-selected when `AI_ENABLE_PAID_FALLBACK=false`).
+  4. `deterministic` / `mock` (zero-failure 10-category heuristic engine when offline or if all providers fail).
+  5. 6-stage bounded diagnostic orchestrator with safe read-only tools and log line grounding.
 - **Consequences:**
-  - Local developers can clone and run tests without external API keys.
-  - Users can experience live AI diagnosis in the browser via Puter.js without entering credit cards.
-  - The backend fails closed if a selected provider lacks credentials in production.
+  - Local developers and CI pipelines run without mandatory paid credentials.
+  - Zero client-side script dependencies, zero dangling Puter artifacts.
+  - Automatic provider failover, circuit breaker protection, and token usage telemetry persisted in PostgreSQL (`ai_gateway_requests`).
 
 ---
 

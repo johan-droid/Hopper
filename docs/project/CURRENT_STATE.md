@@ -25,8 +25,8 @@ The local development environment is 100% self-contained (requiring only Postgre
 | **Secret Redaction** | **WORKING** | `backend/src/lib/parser/secret-scrubber.ts` | AWS/GitHub token regex scrubbing in `scrubber.test.ts` |
 | **Failure Fingerprinting** | **WORKING** | `backend/src/lib/parser/fingerprinter.ts` | Dynamic token normalization in `fingerprint.test.ts` |
 | **Bayesian Flakiness Engine**| **WORKING** | `backend/src/lib/moat/flakiness-engine.ts` | 4-signal heuristic scoring in `flakiness.test.ts` |
-| **Multi-Provider AI** | **WORKING** | `backend/src/lib/ai/diagnose.ts` | Zod validation tested in `ai.test.ts` |
-| **Puter.js Browser AI** | **WORKING** | `frontend/src/lib/puter-ai.ts` | Interactive execution in `InvestigationPage.tsx` |
+| **Multi-Provider AI Gateway** | **WORKING** | `backend/src/lib/ai/gateway/` | Groq & NVIDIA NIM adapters tested in `ai-gateway.test.ts` |
+| **Agent Orchestrator** | **WORKING** | `backend/src/lib/ai/gateway/orchestration/` | 6-stage bounded workflow tested in `ai-gateway.test.ts` |
 | **Sticky PR Reporting** | **WORKING** | `backend/src/lib/github/pr-reporter.ts` | Comment upsert & gating tested in `pr-reporter.test.ts` |
 | **Workspaces & RBAC** | **WORKING** | `backend/src/server/routes/workspaces.ts` | Multi-tenant tests in `workspace-api.test.ts` |
 | **Row-Level Security (RLS)** | **WORKING** | `backend/supabase/migrations/0005`, `0011` | Cross-tenant rejection in `security-tenant-isolation.test.ts` |
@@ -63,9 +63,9 @@ The local development environment is 100% self-contained (requiring only Postgre
 ### 3.3 Automated Test Execution
 - **Backend Test Suite (`npm test`):**
   - Test runner: Vitest v2.1.9
-  - Result: **33 passed (33 test files)**
-  - Test count: **226 passed (226 tests)**
-  - Duration: ~22.8s
+  - Result: **34 passed (34 test files)**
+  - Test count: **246 passed (246 tests)**
+  - Duration: ~15.2s
 - **Frontend Test Suite (`npm run test:frontend`):**
   - Test runner: Vitest v2.1.9
   - Result: **4 passed (4 test files)**

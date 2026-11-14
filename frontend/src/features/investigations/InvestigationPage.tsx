@@ -4,12 +4,7 @@ import {
   useAdhocDiagnoseMutation,
   useSignatureQuery,
 } from '../../api/hooks';
-import { AdhocDiagnoseRequestSchema, AdhocDiagnoseResponse } from '../../api/schema';
-import {
-  diagnoseWithPuterAi,
-  PUTER_MODELS,
-  PuterModelId,
-} from '../../lib/puter-ai';
+import { AdhocDiagnoseRequestSchema } from '../../api/schema';
 import {
   Badge,
   Button,
@@ -78,13 +73,6 @@ const InvestigationPage: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [usedSample, setUsedSample] = useState(true);
 
-  // Puter AI interactive execution state
-  const [engine, setEngine] = useState<'puter' | 'backend'>('puter');
-  const [selectedModel, setSelectedModel] = useState<PuterModelId>('deepseek-chat');
-  const [puterResult, setPuterResult] = useState<AdhocDiagnoseResponse | null>(null);
-  const [puterLoading, setPuterLoading] = useState(false);
-  const [puterError, setPuterError] = useState<string | null>(null);
-
   const applySample = (id: string) => {
     const sample = SAMPLE_LOGS.find((item) => item.id === id);
     if (!sample) return;
@@ -98,7 +86,6 @@ const InvestigationPage: React.FC = () => {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setFormError(null);
-    setPuterError(null);
     const parsed = AdhocDiagnoseRequestSchema.safeParse({
       rawLog,
       jobName,
@@ -110,26 +97,12 @@ const InvestigationPage: React.FC = () => {
       return;
     }
 
-    if (engine === 'puter') {
-      setPuterLoading(true);
-      setPuterResult(null);
-      try {
-        const result = await diagnoseWithPuterAi(parsed.data, selectedModel);
-        setPuterResult(result);
-      } catch (err: any) {
-        setPuterError(err.message || 'Puter AI diagnosis failed. You can switch to Backend Rule Engine.');
-      } finally {
-        setPuterLoading(false);
-      }
-    } else {
-      setPuterResult(null);
-      diagnoseMutation.mutate(parsed.data);
-    }
+    diagnoseMutation.mutate(parsed.data);
   };
 
-  const activeResult = puterResult || diagnoseMutation.data;
-  const activeError = puterError || (diagnoseMutation.error ? (diagnoseMutation.error as Error).message : null);
-  const isDiagnosing = puterLoading || diagnoseMutation.isPending;
+  const activeResult = diagnoseMutation.data;
+  const activeError = diagnoseMutation.error ? (diagnoseMutation.error as Error).message : null;
+  const isDiagnosing = diagnoseMutation.isPending;
 
   const signature = signatureQuery.data;
 
@@ -270,21 +243,10 @@ const InvestigationPage: React.FC = () => {
             title="Ad-hoc diagnosis"
             description="Runs the real parser, scrubber, fingerprinter and diagnosis pipeline. Nothing is attached to a repository."
             actions={
-              <div className="flex items-center gap-2">
-                <a
-                  href="/puter/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-cyan hover:underline"
-                >
-                  <Sparkles className="h-3 w-3" />
-                  <span>Launch Puter AI</span>
-                </a>
-                <Badge tone="neutral">
-                  <FlaskConical className="h-3 w-3" aria-hidden />
-                  Sandbox
-                </Badge>
-              </div>
+              <Badge tone="neutral">
+                <FlaskConical className="h-3 w-3" aria-hidden />
+                Sandbox
+              </Badge>
             }
           />
           <form onSubmit={submit} className="space-y-4 px-5 pb-5">
@@ -304,37 +266,9 @@ const InvestigationPage: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-hairline/60">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium text-ink-muted">Engine:</span>
-                <select
-                  value={engine}
-                  onChange={(e) => {
-                    setEngine(e.target.value as 'puter' | 'backend');
-                    setPuterError(null);
-                  }}
-                  className="rounded border border-hairline bg-inset px-2.5 py-1 text-xs text-ink focus:outline-none focus:border-cyan cursor-pointer"
-                >
-                  <option value="puter">Puter AI (Zero-Key Browser Allowance)</option>
-                  <option value="backend">Backend Diagnostic Pipeline (Deterministic / Outbox)</option>
-                </select>
-              </div>
-
-              {engine === 'puter' ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-medium text-ink-muted">Model:</span>
-                  <select
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value as PuterModelId)}
-                    className="rounded border border-hairline bg-inset px-2.5 py-1 text-xs text-cyan font-mono focus:outline-none focus:border-cyan cursor-pointer"
-                  >
-                    {PUTER_MODELS.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
+              <span className="text-[11px] text-ink-muted">
+                Engine: backend diagnostic pipeline (gateway-routed AI with deterministic fallback)
+              </span>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -391,11 +325,7 @@ const InvestigationPage: React.FC = () => {
               </span>
               <Button type="submit" variant="primary" loading={isDiagnosing}>
                 <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                {isDiagnosing
-                  ? 'Diagnosing…'
-                  : engine === 'puter'
-                    ? `Diagnose with Puter (${selectedModel})`
-                    : 'Run backend diagnosis'}
+                {isDiagnosing ? 'Diagnosing…' : 'Run diagnosis'}
               </Button>
             </div>
           </form>
@@ -408,7 +338,6 @@ const InvestigationPage: React.FC = () => {
             title="Diagnosis failed"
             message={activeError}
             onRetry={() => {
-              setPuterError(null);
               diagnoseMutation.reset();
             }}
           />

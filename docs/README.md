@@ -16,8 +16,9 @@ docs/
 ├── architecture/
 │   ├── SYSTEM_OVERVIEW.md              # High-level architecture, event flows, delivery guarantees
 │   ├── ARCHITECTURE.md                 # Frontend and backend subsystems, queue and parser details
-│   ├── DATA_MODEL.md                   # Database schema, ERD, migrations 0001-0013, RLS policies
-│   └── INTEGRATIONS.md                 # GitHub App, Stripe, Puter.js, Vercel, and AI providers
+│   ├── DATA_MODEL.md                   # Database schema, ERD, migrations 0001-0014, RLS policies
+│   ├── INTEGRATIONS.md                 # GitHub App, Stripe, Groq, NVIDIA NIM, Vercel, and AI providers
+│   └── AI_GATEWAY.md                   # Multi-provider AI gateway, routing, resilience, and orchestrator
 │
 ├── development/
 │   ├── GETTING_STARTED.md              # Prerequisites, local setup, Docker, and developer scripts
