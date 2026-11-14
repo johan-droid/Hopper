@@ -83,3 +83,8 @@
 - **Symptom:** `GET /api/auth/github` forwarded any client-provided `redirect_uri` into the GitHub authorize URL, exposing a prefix-match open-redirect surface against the registered callback.
 - **Resolution:** The query parameter is ignored; the authorization URL is always built from server-side configuration only. A duplicate `POST /api/auth/logout` route declaration left by an intermediate edit was also removed.
 - **Verification:** `npm run lint` and `npm test` (226/226) after removal.
+
+### ISSUE-017: Missing Multi-Resolution Favicon 404 & Squished Login Button Height
+- **Symptom:** Browser navigation to `/login` triggered a 404 on `/favicon.ico` because only a legacy cyan SVG icon was present. Furthermore, the "Continue with GitHub" button on `LoginPage.tsx` inherited the button primitive's default `h-9` (36px) constraint, causing vertical padding conflicts.
+- **Resolution:** Generated multi-resolution `favicon.ico` (16x16, 32x32, 48x48) in `frontend/public/` and `frontend/app/`. Configured Next.js metadata `layout.tsx` with dual SVG and ICO entries aligned with Hopper's crimson brand palette (`#f43f5e`). Updated `LoginPage.tsx` button to explicitly declare `h-12` (48px) with `px-4` and balanced `h-5 w-5` GitHub icon.
+- **Verification:** Verified with `agent-browser` CDP automation (live click redirected to GitHub OAuth), `file` icon validation, `npm run test:frontend` (34/34), and `npm run build` (21/21 static pages).

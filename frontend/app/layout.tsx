@@ -6,7 +6,10 @@ export const metadata: Metadata = {
   title: 'Hopper — Next-Generation CI/CD Failure Diagnosis',
   description: 'Understand every failure. Move your development forward with Hopper CI/CD diagnosis.',
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico' },
+    ],
   },
 };
 

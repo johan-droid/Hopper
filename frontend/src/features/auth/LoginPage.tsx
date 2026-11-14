@@ -218,13 +218,13 @@ export const LoginPage: React.FC = () => {
               <Button
                 type="button"
                 variant="primary"
-                className="group relative flex w-full items-center justify-center gap-3 rounded-lg bg-white py-3.5 px-4 text-sm font-semibold text-neutral-950 shadow-lg shadow-white/5 transition-all duration-200 hover:bg-neutral-100 hover:shadow-rose-500/10 focus-visible:ring-2 focus-visible:ring-rose-500 disabled:opacity-60"
+                className="group relative flex w-full h-12 items-center justify-center gap-3 rounded-lg bg-white px-4 text-sm font-semibold text-neutral-950 shadow-lg shadow-white/5 transition-all duration-200 hover:bg-neutral-100 hover:shadow-rose-500/10 focus-visible:ring-2 focus-visible:ring-rose-500 disabled:opacity-60"
                 onClick={handleGitHubOAuth}
                 loading={busy || authStep === 'redirecting'}
                 disabled={busy || authStep === 'redirecting' || authStep === 'exchanging' || authStep === 'success'}
                 aria-label="Continue with GitHub"
               >
-                <GithubIcon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110 text-neutral-950" />
+                <GithubIcon className="h-5 w-5 shrink-0 transition-transform group-hover:scale-110 text-neutral-950" />
                 <span>
                   {authStep === 'redirecting'
                     ? 'Connecting to GitHub...'
