@@ -1,14 +1,28 @@
 import { createClient } from '@supabase/supabase-js';
 
+const getEnvVar = (key: string): string => {
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key] as string;
+  }
+  try {
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[key]) {
+      return (import.meta as any).env[key] as string;
+    }
+  } catch {
+    // Ignore in non-Vite environments
+  }
+  return '';
+};
+
 const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL ??
-  import.meta.env.NEXT_PUBLIC_SUPABASE_URL ??
-  '';
+  getEnvVar('NEXT_PUBLIC_SUPABASE_URL') ||
+  getEnvVar('VITE_SUPABASE_URL');
+
 const supabaseAnonKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ??
-  import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
-  '';
+  getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY') ||
+  getEnvVar('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') ||
+  getEnvVar('VITE_SUPABASE_ANON_KEY') ||
+  getEnvVar('VITE_SUPABASE_PUBLISHABLE_KEY');
 
 /**
  * Supabase is configured only when both public values are present. When absent

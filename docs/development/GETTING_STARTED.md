@@ -75,18 +75,18 @@ npm run migrate
 This applies all migrations (`0001` through `0013`) and initial seed data.
 
 ### Step 7: Launch the Development Environment
-Start the full development stack (API Gateway, background queue worker, and Vite React frontend) with a single command:
+Start the full development stack (API Gateway, background queue worker, and Next.js frontend) with a single command:
 
 ```bash
 npm run dev
 ```
 
 The orchestrator (`scripts/local/start.mjs`) automatically:
-1. Detects port conflicts on `3000` (backend) and `5173` (frontend).
+1. Detects port conflicts on `3000` (backend) and `3001`/`5173` (frontend).
 2. Verifies PostgreSQL connectivity.
 3. Spawns the Express backend API on `http://localhost:3000`.
 4. Spawns the local durable queue worker.
-5. Launches the Vite development server on `http://localhost:5173`.
+5. Launches the Next.js development server (`next dev`).
 
 ---
 
@@ -96,10 +96,10 @@ Once `npm run dev` is running, access the following services:
 
 | Service | Local URL | Purpose |
 |---|---|---|
-| **Frontend Application** | <http://localhost:5173> | React SPA dashboard, investigation sandbox, failure feeds |
+| **Frontend Application** | <http://localhost:3000> (or Vercel port) | Next.js App Router dashboard, investigation sandbox, failure feeds |
 | **Backend API Gateway** | <http://localhost:3000> | Express API gateway root |
 | **System Health Check** | <http://localhost:3000/api/health> | Health status of DB, coordination, and queue |
-| **Puter.js Serverless Edition** | <http://localhost:5173/puter/> | Standalone browser-based Puter AI edition |
+| **Puter.js Serverless Edition** | <http://localhost:3000/puter/> | Standalone browser-based Puter AI edition |
 
 ---
 
@@ -117,7 +117,7 @@ npm run stop
 # Run only the backend API server
 npm run dev:backend
 
-# Run only the frontend Vite server
+# Run only the frontend Next.js server
 npm run dev:frontend
 
 # Run the local durable queue worker

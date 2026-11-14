@@ -48,7 +48,7 @@ The repository is structured as an npm workspaces monorepo:
 
 | Layer | Technology | Key Files & Location |
 |---|---|---|
-| **Frontend** | React 18, Vite 5, Tailwind CSS, TanStack Query v5, Zustand, React Router v7 | `frontend/` (entry: `frontend/src/main.tsx`) |
+| **Frontend** | Next.js 14 (App Router), React 18, Tailwind CSS, TanStack Query v5, Zustand | `frontend/` (entry: `frontend/app/layout.tsx`, `frontend/app/page.tsx`) |
 | **Backend API** | Node.js 20+, Express 4, TypeScript, Zod | `backend/` (entry: `backend/src/server/app.ts`, `backend/src/server/index.ts`) |
 | **Database & Search** | PostgreSQL 16 with `pgvector` extension (Supabase in production, Docker in dev) | `backend/supabase/migrations/0001_initial_schema.sql` .. `0013_*.sql` |
 | **Queue & Outbox** | PostgreSQL durable outbox (`hopper_job_queue`, `hopper_job_dead_letters`) + Vercel Queues push delivery | `backend/src/queue/` (`job-store.ts`, `consumer.ts`, `transport.ts`) |

@@ -4,7 +4,7 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { CommandPalette } from '../ui/CommandPalette';
 
-export const AppShell: React.FC = () => {
+export const AppShell: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
@@ -21,7 +21,7 @@ export const AppShell: React.FC = () => {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onOpenMobileNav={() => setMobileNavOpen(true)} />
         <main id="main-content" className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 md:px-6 lg:px-8">
-          <Outlet />
+          {children ?? <Outlet />}
         </main>
         <footer className="border-t border-hairline px-4 py-3 text-[10px] text-ink-muted md:px-6">
           Hopper — CI/CD failure diagnosis · Supabase · Vercel

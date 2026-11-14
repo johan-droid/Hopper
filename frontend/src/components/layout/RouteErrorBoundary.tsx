@@ -62,7 +62,7 @@ export const RouteErrorBoundary: React.FC = () => {
           </div>
 
           {/* Collapsible stack details in dev */}
-          {import.meta.env.DEV && details ? (
+          {process.env.NODE_ENV !== 'production' && details ? (
             <div className="mt-5 rounded-lg border border-hairline bg-inset p-3 font-mono text-[11px] text-ink-muted">
               <div className="mb-1.5 flex items-center gap-1.5 text-xs text-ink-secondary">
                 <Terminal className="h-3.5 w-3.5" />

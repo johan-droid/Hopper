@@ -4,10 +4,10 @@ import { SegmentedNav } from '../../components/ui/feedback';
 import { SETTINGS_TABS } from '../../lib/routes';
 
 /** Shared chrome for /app/settings/*: the sub-navigation lives in one place. */
-const SettingsLayout: React.FC = () => (
+export const SettingsLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => (
   <>
     <SegmentedNav label="Settings sections" items={SETTINGS_TABS} />
-    <Outlet />
+    {children ?? <Outlet />}
   </>
 );
 

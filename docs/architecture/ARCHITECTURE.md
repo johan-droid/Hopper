@@ -24,10 +24,11 @@ Hopper/
 │   │   └── workers/                  # Queue processors (workflow-job, slack-alert)
 │   ├── supabase/migrations/          # Idempotent forward-only SQL migrations (0001 to 0013)
 │   └── tests/                        # 33 Vitest suites covering all subsystems (226 tests)
-├── frontend/                         # React 18 + Vite 5 Client SPA
+├── frontend/                         # Next.js 14 App Router + React 18 Application
+│   ├── app/                          # Next.js App Router (layout, providers, 20 routes)
 │   ├── src/
 │   │   ├── api/                      # TanStack Query hooks, API client, Zod schemas
-│   │   ├── app/                      # App root, React Router v7 routes, RequireAuth guard
+│   │   ├── app/                      # Legacy App component & RequireAuth guard
 │   │   ├── components/               # UI design system primitives & layout shells
 │   │   ├── features/                 # Domain pages: overview, failures, diagnoses, trends,
 │   │   │                             # investigations, repositories, settings, auth, marketing
@@ -177,10 +178,11 @@ Where:
 
 ## 5. Frontend Architecture
 
-The frontend is a modern single-page application built with React 18, Vite 5, Tailwind CSS, TanStack Query v5, Zustand, and React Router v7.
+The frontend is a modern web application built with Next.js 14 (App Router), React 18, Tailwind CSS, TanStack Query v5, Zustand, and Lucide React.
 
 ### 5.1 Directory Structure
-- `src/app/`: Application bootstrap, top-level router providers, and route guard (`RequireAuth.tsx`).
+- `app/`: Next.js 14 App Router layout, providers, and route endpoints (20 prerendered static/dynamic routes).
+- `src/lib/router-compat.tsx`: Next.js navigation compatibility adapter providing native `next/link` and `next/navigation` hooks.
 - `src/features/`: Feature modules:
   - `overview/`: Failure metrics, flakiness leaderboards, health telemetry.
   - `failures/`: Individual CI run execution view with log viewer.

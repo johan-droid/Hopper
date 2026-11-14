@@ -27,7 +27,23 @@ import {
   DiagnosisHistoryItemSchema,
 } from './schema';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || process.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const getApiBaseUrl = (): string => {
+  if (typeof process !== 'undefined' && process.env) {
+    if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+    if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (process.env.VITE_API_BASE_URL) return process.env.VITE_API_BASE_URL;
+  }
+  try {
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
+      return (import.meta as any).env.VITE_API_BASE_URL || '';
+    }
+  } catch {
+    // Ignore in non-Vite environments
+  }
+  return '';
+};
+
+const API_BASE_URL = getApiBaseUrl().replace(/\/$/, '');
 const REQUEST_TIMEOUT_MS = 20_000;
 
 export class ApiError extends Error {

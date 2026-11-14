@@ -36,10 +36,17 @@
     "test:frontend": "npm --prefix frontend run test",
     "vercel:build": "npx vercel build",
     "vercel:dev": "npx vercel dev",
-  "overrides": {
-    "@vercel/cli-config": "^0.3.8"
-  },
-  "author": "Hopper Engineering",
+    "overrides": {
+      "@vercel/cli-config": "^0.3.8"
+    },
+    "author": "Hopper Engineering",
     "license": "Apache-2.0"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "esbuild@0.27.2": true,
+    "esbuild@0.28.2": true,
+    "esbuild@0.21.5": true,
+    "esbuild@0.27.0": true
   }
 }

@@ -19,7 +19,7 @@ graph TD
     end
 
     subgraph Vercel ["Vercel Single-Origin Deployment"]
-        FE[React SPA · Vite / Tailwind]
+        FE[Next.js 14 App Router · Tailwind]
         GW[Express API Gateway · /api/*]
         CRON[Vercel Cron · Daily Drain]
         VQ[Vercel Queues · hopper-ci-events]

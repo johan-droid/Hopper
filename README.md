@@ -41,7 +41,7 @@ graph TD
     WRK -.->|Terminal Failures| DLQ[(hopper_job_dead_letters)]
 ```
 
-> **Platform:** Node.js 20+ · Express 4 · Vite 5 + React 18 · Supabase PostgreSQL 16 + `pgvector` · Vercel Multi-Service Ingress · Multi-Provider AI (Claude, OpenAI, Puter.js, Mock).  
+> **Platform:** Node.js 20+ · Express 4 · Next.js 14 (App Router) + React 18 · Supabase PostgreSQL 16 + `pgvector` · Vercel Multi-Service Ingress · Multi-Provider AI (Claude, OpenAI, Puter.js, Mock).  
 > **No Redis. No Cloudflare. No BullMQ.**
 
 ---
@@ -90,9 +90,9 @@ npm run dev
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Full-stack development orchestrator (API + worker + Vite frontend) |
+| `npm run dev` | Full-stack development orchestrator (API + worker + Next.js frontend) |
 | `npm run dev:backend` | Starts only the Express backend API (`tsx watch`) |
-| `npm run dev:frontend` | Starts only the Vite React frontend |
+| `npm run dev:frontend` | Starts only the Next.js frontend (`next dev`) |
 | `npm run dev:worker` | Starts only the local durable queue worker |
 | `npm run status` | Inspects running processes and port allocations |
 | `npm run stop` | Cleanly terminates all Hopper-owned child processes |
@@ -101,7 +101,7 @@ npm run dev
 | `npm run lint` | Strict TypeScript compilation check across all workspaces |
 | `npm test` | Executes backend Vitest suites (33 test files / 226 tests) |
 | `npm run test:frontend` | Executes frontend Vitest suites (4 test files / 34 tests) |
-| `npm run build` | Compiles production backend (`tsup`) and frontend (`vite`) |
+| `npm run build` | Compiles production backend (`tsup`) and frontend (`next build`) |
 | `npm run simulate -- -s timeout`| Simulates an offline CI failure diagnosis (timeout, assertion, oom) |
 | `npm run lifecycle` | Executes full 8-stage automated SDLC build and test lifecycle |
 

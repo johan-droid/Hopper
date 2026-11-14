@@ -32,6 +32,7 @@ The local development environment is 100% self-contained (requiring only Postgre
 | **Row-Level Security (RLS)** | **WORKING** | `backend/supabase/migrations/0005`, `0011` | Cross-tenant rejection in `security-tenant-isolation.test.ts` |
 | **Serverless OAuth State** | **WORKING** | `backend/src/server/routes/auth.ts` | HMAC-signed state tested in `github-auth-sync.test.ts` |
 | **Stripe Billing Lifecycle** | **WORKING** | `backend/src/server/routes/billing.ts` | Webhooks and checkout tested in `stripe-billing.test.ts` |
+| **Next.js 14 App Router** | **WORKING** | `frontend/app/` (20 prerendered routes) | `next build` static export & SSR compilation check |
 | **Single-Agent Governance** | **ENFORCED** | `AGENTS.md` | Single primary agent policy documented and enforced |
 | **Live GitHub App Ingress** | **GATED** | `backend/src/lib/github/` | Requires production `GITHUB_APP_PRIVATE_KEY` |
 | **Live Stripe Webhooks** | **GATED** | `backend/src/lib/billing/` | Requires production `STRIPE_WEBHOOK_SECRET` |
@@ -46,17 +47,28 @@ The local development environment is 100% self-contained (requiring only Postgre
   - Backend: `tsc --noEmit` -> **0 errors, 0 warnings**
   - Frontend: `tsc --noEmit` -> **0 errors, 0 warnings**
 
-### 3.2 Automated Test Execution
+### 3.2 Production Compilation (`npm run build`)
+- **Backend Build (`npm run build:backend`):**
+  - Compiler: `tsup` (Node 20 ESM + DTS)
+  - Output: `dist/index.js`, `dist/cli/hopper.js`, `dist/server/index.js`, `dist/workers/worker-entry.js`
+  - Result: **Clean build, 0 errors**
+- **Frontend Build (`npm run build:frontend`):**
+  - Compiler: Next.js 14.2.35 App Router (`next build`)
+  - Output: 20/20 prerendered static & dynamic routes (`.next`)
+  - Build Warnings: **0 warnings** (resolved `cache-dir`, `allowScripts` for `esbuild`, and Rollup Zod annotations)
+  - Result: **Clean build, 0 errors**
+
+### 3.3 Automated Test Execution
 - **Backend Test Suite (`npm test`):**
   - Test runner: Vitest v2.1.9
   - Result: **33 passed (33 test files)**
   - Test count: **226 passed (226 tests)**
-  - Duration: ~21.1s
+  - Duration: ~22.8s
 - **Frontend Test Suite (`npm run test:frontend`):**
   - Test runner: Vitest v2.1.9
   - Result: **4 passed (4 test files)**
   - Test count: **34 passed (34 tests)**
-  - Duration: ~1.4s
+  - Duration: ~1.1s
 
 ### 3.3 Environment Preflight (`npm run doctor`)
 - 17 passed checks: Node.js (v24), npm, Docker, Docker Compose, root/backend/frontend dependencies, `.env` configs, database connectivity, port availability, and retired Cloudflare artifact guards.

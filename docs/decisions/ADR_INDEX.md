@@ -91,3 +91,16 @@ This index records all authoritative architectural decisions made in the Hopper 
   - Unified repository ownership and consistent architectural style.
   - Zero contradictory agent instructions.
   - Clear traceability and accountability for all codebase changes.
+
+---
+
+### ADR-008: Migration of Frontend to Next.js 14 App Router on Vercel
+- **Status:** **APPROVED & IMPLEMENTED**
+- **Date:** November 2026
+- **Context:** The original Vite SPA architecture required custom SPA rewrite transforms in `vercel.json` (`path: /index.html`), lacked native Vercel Edge/SSR optimizations, and generated Rollup comment warnings during bundling. Vercel build runners also triggered npm `cache-dir` and `install-scripts` warnings.
+- **Decision:** Migrate `frontend/` from Vite to Next.js 14 (App Router). Maintain isomorphic routing via `router-compat.tsx` with native `next/link` and `next/navigation`. Configure `.npmrc` (`loglevel=error`) and `package.json` (`allowScripts`) to silence build noise. Update `vercel.json` to declare `"framework": "nextjs"`.
+- **Consequences:**
+  - First-class Next.js compilation, prerendering, and static optimization (20/20 routes prerendered).
+  - Clean separation of server/client components via `'use client'` boundaries.
+  - Eliminated Vercel deployment warnings (`cache-dir`, `install-scripts`, Rollup comment annotations).
+  - Preserved 100% of existing frontend unit tests (34/34 passing) and UI feature functionality.
