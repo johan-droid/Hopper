@@ -42,20 +42,39 @@ graph TD
 ## 2. Authentication & Session Management
 
 ### 2.1 Dual-Mode Authentication Architecture
-1. **Hopper Session JWTs:** Issued upon successful GitHub OAuth token exchange. Encodes `userId`, `username`, and `currentWorkspaceId`. Signed with `JWT_SECRET`.
+1. **Hopper Session JWTs:** Issued upon successful GitHub OAuth token exchange. Encodes verified user identity (`userId`, `username`, `currentWorkspaceId`) strictly without leaking upstream GitHub access tokens. Delivered to browsers via secure `HttpOnly; SameSite=Lax; Path=/` cookies (`hopper_session`) or `Authorization: Bearer <token>` headers.
 2. **Supabase Auth JWTs:** Fully supported for cloud-native installations. Verified via `SUPABASE_JWT_SECRET` (symmetric HS256) or `SUPABASE_JWT_PUBLIC_KEY` (asymmetric RS256/ES256).
 
-### 2.2 Cryptographic Algorithm Allowlisting
+### 2.2 Minimal OAuth Scope Enforcement & App Boundary
+GitHub OAuth is restricted to minimal identity scopes:
+```text
+scope: "read:user,user:email"
+```
+Broad permissions (`repo`, `read:org`, write access) are explicitly rejected at user login. Repository access, commit status checks, and pull-request comments are strictly isolated to verified GitHub App installations per repository.
+
+### 2.3 Secure HttpOnly Cookie Transport
+OAuth callbacks never transmit JWT session tokens in browser URL query strings (preventing referrer leaks, browser history leakage, and log capture). Instead, `/api/auth/github/callback` sets an `HttpOnly`, `Secure`, `SameSite=Lax` cookie named `hopper_session` with a 7-day TTL and redirects cleanly to `/app/overview`. Client fetch requests default to `credentials: 'same-origin'`.
+
+### 2.4 Token Stripping from Client Session Claims
+User JWT tokens contain only verified user identity metadata. Upstream `github_token` credentials are never serialized into client JWT claims, preventing token exposure via browser XSS or localStorage exfiltration.
+
+### 2.5 Cryptographic Algorithm Allowlisting
 To prevent "none" algorithm attacks and key-confusion vulnerabilities, `backend/src/server/middleware/auth.ts` explicitly enforces an algorithm allowlist:
 ```typescript
 const ALLOWED_ALGORITHMS = ['HS256', 'RS256', 'ES256'];
 ```
 Any token specifying `alg: "none"` or unapproved algorithms is rejected with `401 Unauthorized`.
 
-### 2.3 Stateless Serverless OAuth CSRF Protection
+### 2.6 Stateless Serverless OAuth CSRF Protection
 GitHub OAuth state tokens are generated via `generateSignedOAuthState()` (`backend/src/lib/github/user-auth.ts`). Each state parameter consists of:
 $$\text{State} = \text{base64}(\text{timestamp} \mathbin{\Vert} \text{randomBytes} \mathbin{\Vert} \text{HMAC}_{\text{JWT\_SECRET}}(\text{timestamp} \mathbin{\Vert} \text{randomBytes}))$$
 This allows any serverless function instance to verify state authenticity and enforce a 10-minute validity window without relying on shared in-memory state.
+
+### 2.7 Ad-Hoc Diagnostic Rate Limiting & Resource Protection
+The unauthenticated ad-hoc diagnostic endpoint (`POST /api/diagnose/adhoc`) enforces a strict sliding-window rate limit (max 15 requests/minute per client IP) and a 500 KB payload ceiling to prevent AI provider token exhaustion and memory DoS attacks.
+
+### 2.8 Fail-Closed Stripe Billing
+When Stripe credentials are not provisioned in production, `/api/billing/checkout` fails closed with HTTP 503 (`status: 'blocked'`), preventing synthetic mock checkout sessions from misleading users.
 
 ---
 

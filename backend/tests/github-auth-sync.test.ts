@@ -33,7 +33,7 @@ describe('GitHub Authentication & Synchronization Engine', () => {
     expect(body.url).toBeDefined();
     expect(body.url).toContain('https://github.com/login/oauth/authorize');
     expect(body.url).toContain('client_id=');
-    expect(body.url).toContain('scope=read%3Auser%2Cuser%3Aemail%2Cread%3Aorg%2Crepo');
+    expect(body.url).toContain('scope=read%3Auser%2Cuser%3Aemail');
     expect(body.state).toBeDefined();
   });
 

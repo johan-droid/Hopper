@@ -153,4 +153,22 @@
   .log-line {
     overflow-wrap: anywhere;
   }
+
+  /* Radial vignette used by DotGridBackground to darken page edges. */
+  .bg-radial-vignette {
+    background-image: radial-gradient(
+      ellipse 80% 70% at 50% 40%,
+      transparent 0%,
+      rgb(0 0 0 / 0.45) 100%
+    );
+  }
+
+  /* Horizontal stage-tab rails that scroll without a visible scrollbar. */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }

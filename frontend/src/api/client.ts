@@ -120,7 +120,7 @@ export async function request<S extends z.ZodType>(
       ...options,
       headers,
       signal: controller.signal,
-      credentials: 'omit',
+      credentials: options.credentials ?? 'same-origin',
     });
   } catch (error) {
     clearTimeout(timeout);

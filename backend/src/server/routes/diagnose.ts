@@ -13,6 +13,9 @@ import { UserProfileRepository } from '../../db/repositories/user-profile.reposi
 import { requireAuth } from '../middleware/auth.js';
 import { ApiError } from '../middleware/error-handler.js';
 
+// In-memory rate limiter for public ad-hoc triage: max 15 requests per minute per IP
+const adhocLimiterMap = new Map<string, { count: number; resetAt: number }>();
+
 export function createDiagnoseRouter(
   diagnosticReportRepo: DiagnosticReportRepository = new DiagnosticReportRepository(),
   workspaceRepo: WorkspaceRepository = new WorkspaceRepository(),
@@ -74,16 +77,43 @@ export function createDiagnoseRouter(
     }
   });
 
-  // Ad-hoc diagnostic endpoint for developer CLI or manual testing
+  // Ad-hoc diagnostic endpoint for developer CLI or manual testing with bounded abuse controls
   router.post('/adhoc', async (req: Request, res: Response) => {
+    // 1. Sliding window rate limiting
+    const clientIp = req.ip || req.socket.remoteAddress || 'unknown-client';
+    const now = Date.now();
+    const entry = adhocLimiterMap.get(clientIp);
+
+    if (entry && now < entry.resetAt) {
+      if (entry.count >= 15) {
+        return res.status(429).json({
+          error: 'Rate limit exceeded: maximum 15 ad-hoc diagnostic requests per minute. Please try again later.',
+        });
+      }
+      entry.count += 1;
+    } else {
+      adhocLimiterMap.set(clientIp, { count: 1, resetAt: now + 60_000 });
+    }
+
     const { rawLog, jobName = 'build', stepName = 'test', modifiedFiles = [] } = req.body;
 
     if (!rawLog || typeof rawLog !== 'string') {
       return res.status(400).json({ error: 'rawLog string is required' });
     }
 
+    // 2. Bound log size to prevent denial of service (max 500 KB)
+    if (rawLog.length > 500_000) {
+      return res.status(413).json({ error: 'Payload Too Large: rawLog exceeds maximum limit of 500KB' });
+    }
+
+    const cleanJob = typeof jobName === 'string' ? jobName.slice(0, 100) : 'build';
+    const cleanStep = typeof stepName === 'string' ? stepName.slice(0, 100) : 'test';
+    const cleanFiles = Array.isArray(modifiedFiles)
+      ? modifiedFiles.filter((f): f is string => typeof f === 'string').slice(0, 50)
+      : [];
+
     const sliced = sliceFailedStepLog(rawLog);
-    const signature = computeFailureSignature(jobName, stepName, sliced.detectedTestIdentifier, sliced.cleanedSnippet);
+    const signature = computeFailureSignature(cleanJob, cleanStep, sliced.detectedTestIdentifier, sliced.cleanedSnippet);
     const flakinessScore = calculateFlakinessScore({
       sameShaRetryPasses: 0,
       uniquePrsAffected: 1,
@@ -94,11 +124,11 @@ export function createDiagnoseRouter(
 
     const diagnosis = await synthesizeDiagnosis({
       workflowName: 'Adhoc Diagnostic',
-      jobName,
-      stepName,
+      jobName: cleanJob,
+      stepName: cleanStep,
       exitCode: sliced.detectedExitCode,
       commitSha: '0000000000000000000000000000000000000000',
-      modifiedFiles,
+      modifiedFiles: cleanFiles,
       historicalStats: {
         totalOccurrences: 1,
         uniquePrsAffected: 1,

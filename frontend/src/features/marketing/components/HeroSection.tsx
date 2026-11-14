@@ -173,9 +173,9 @@ export const HeroSection: React.FC = () => {
 
           {/* Primary Headline */}
           <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl lg:leading-[1.1]">
-            Understand every failure.{' '}
+            Know why your pipeline failed.{' '}
             <span className="bg-gradient-to-r from-rose-400 via-rose-500 to-rose-300 bg-clip-text text-transparent">
-              Move development forward.
+              Fix the recurring ones first.
             </span>
           </h1>
 
@@ -222,9 +222,9 @@ export const HeroSection: React.FC = () => {
                 <div className="flex items-center gap-2.5">
                   <span className="flex h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse" />
                   <span className="font-mono text-xs font-semibold uppercase tracking-wider text-white">
-                    Verified Processing Pipeline
+                    Interactive Product Demonstration (Curated Example Scenarios)
                   </span>
-                  <span className="text-ink-muted text-xs hidden sm:inline">· Click a stage to inspect real engine state</span>
+                  <span className="text-ink-muted text-xs hidden sm:inline">· Click a stage to inspect engine telemetry</span>
                 </div>
 
                 <div className="flex items-center gap-2">

@@ -39,7 +39,7 @@ const STEPS: Step[] = [
     number: '03',
     title: 'Deterministic Fingerprinting',
     detail: 'Volatile timestamps, memory addresses, UUIDs, and commit SHAs normalized to collapse duplicate failures into stable signatures.',
-    tag: 'AST Normalizer',
+    tag: 'Token Normalizer',
     icon: Fingerprint,
   },
   {

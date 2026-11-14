@@ -18,6 +18,10 @@
 | **ISSUE-010** | MEDIUM | Database | Performance Overhead on Deep Leaf Table RLS Joins | **RESOLVED** | Denormalized `workspace_id` in Migration `0011` |
 | **ISSUE-011** | HIGH | Architecture | Legacy Cloudflare, Redis & BullMQ Dependencies Lingering | **RESOLVED** | Fully removed; guarded by CI and Doctor |
 | **ISSUE-012** | HIGH | Config | In-Memory Fallback Adapters Permitted in Production | **RESOLVED** | `validateRuntimeConfig()` fails closed |
+| **ISSUE-013** | HIGH | Security | Session Token in URL Query & Over-Privileged OAuth Scopes | **RESOLVED** | HttpOnly cookie session + scoped `read:user,user:email` |
+| **ISSUE-014** | MEDIUM | Frontend | Login Button Statically Prerendered Disabled During SSR | **RESOLVED** | Removed `status === 'loading'` check on login button |
+| **ISSUE-015** | MEDIUM | Frontend | Landing Telemetry Fabricated/Wrong-Shaped When Backend Absent | **RESOLVED** | Real `/api/health` metric paths, no invented values |
+| **ISSUE-016** | LOW | Security | Client-Supplied OAuth `redirect_uri` Passthrough | **RESOLVED** | `GET /api/auth/github` no longer accepts `redirect_uri` |
 | **LIMIT-001** | LOW | Deployment | Vercel Hobby Cron Frequency Limited to Daily | **ACTIVE** | Backstop only; primary path is push delivery |
 | **LIMIT-002** | LOW | Queue | Vercel Queues Lacks Native Dead-Letter Queue | **ACTIVE** | Application-level DLQ in PostgreSQL |
 | **LIMIT-003** | LOW | Dev / CI | Local Offline Runs Rely on Mock AI by Default | **ACTIVE** | By design; live keys optional |
@@ -59,3 +63,23 @@
 - **Symptom:** Early prototypes relied on Cloudflare Workers, Redis, and BullMQ. Traces of these configurations created confusion about the system of record.
 - **Resolution:** Completely purged `wrangler.toml`, Cloudflare deployment scripts, `ioredis`, and `bullmq`. Built PostgreSQL durable outbox (`0010_durable_queue_and_coordination.sql`). Added CI and `npm run doctor` guards preventing reintroduction.
 - **Verification:** `npm run doctor` executes retired-artifact checks with 100% pass rate.
+
+### ISSUE-013: Session Token Exfiltration in OAuth Callback Query Parameters & Excessive Identity Scopes
+- **Symptom:** OAuth callback returned JWT sessions via URL query string `?token=...`, exposing tokens to browser history, proxy access logs, and referrer headers. User sign-in also requested `repo` and `read:org` scopes when only identity was needed.
+- **Resolution:** Reduced OAuth scopes to minimal identity scopes (`read:user,user:email`). Removed `github_token` from serialized JWT session payloads. Implemented HttpOnly, Secure, SameSite=Lax cookie delivery (`hopper_session`) and clean 302 redirect to `/app/overview`.
+- **Verification:** Verified by `backend/tests/github-auth-sync.test.ts` and automated end-to-end auth flows.
+
+### ISSUE-014: Login Button Statically Prerendered Disabled During SSR
+- **Symptom:** Next.js static prerendering of `/login` initialized `useSession` with `status: 'loading'`, resulting in HTML output with `<button disabled="">` and `cursor-not-allowed`, preventing immediate user interaction.
+- **Resolution:** Removed `status === 'loading'` guard from the primary "Continue with GitHub" button in `LoginPage.tsx`, keeping it interactable immediately upon page view.
+- **Verification:** Verified with production Next.js prerender build (`20/20` static pages).
+
+### ISSUE-015: Landing Backend-State Section Read Wrong Metric Shape and Fabricated Values
+- **Symptom:** `BackendStateVisualization` read `dependencies.queue.pending` although `/api/health` nests counts under `dependencies.queue.metrics` (`pending`, `processing`, `completed`, `failed`, `dead`), so the outbox pending count was always 0 regardless of real queue state. A hardcoded `?? 2.1` database-latency fallback and a `0 jobs` offline placeholder presented invented telemetry, and "System 100% Operational" overstated the health contract.
+- **Resolution:** Metric paths corrected to `queue.metrics.*`; queue-derived node states (`outbox`, `claim`) render `unknown` until live metrics exist; offline/missing values render `Offline` / `—`; status copy now reads "All Systems Operational"; internal infra advice (`npm run infra:up`) removed from the public page.
+- **Verification:** `npm run lint`, `npm test` (226/226), `npm run test:frontend` (34/34), `npm run build` — all passing.
+
+### ISSUE-016: Client-Supplied OAuth `redirect_uri` Passthrough on the Authorization Entry Point
+- **Symptom:** `GET /api/auth/github` forwarded any client-provided `redirect_uri` into the GitHub authorize URL, exposing a prefix-match open-redirect surface against the registered callback.
+- **Resolution:** The query parameter is ignored; the authorization URL is always built from server-side configuration only. A duplicate `POST /api/auth/logout` route declaration left by an intermediate edit was also removed.
+- **Verification:** `npm run lint` and `npm test` (226/226) after removal.

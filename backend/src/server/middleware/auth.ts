@@ -10,7 +10,6 @@ export interface AuthenticatedUser {
   login?: string;
   github_user_id?: number;
   avatar_url?: string;
-  github_token?: string;
   app_metadata?: Record<string, any>;
   user_metadata?: Record<string, any>;
 }
@@ -178,9 +177,32 @@ export function verifyJwtToken(token: string, options: JwtVerificationOptions = 
   return payload;
 }
 
+export function extractAuthToken(req: Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7).trim();
+  }
+
+  // Check parsed cookies if cookie-parser is installed
+  if ((req as any).cookies?.hopper_session) {
+    return (req as any).cookies.hopper_session;
+  }
+
+  // Parse Cookie header directly (zero-dependency serverless compatibility)
+  if (req.headers.cookie) {
+    const match = req.headers.cookie.match(/(?:^|;\s*)hopper_session=([^;]+)/);
+    if (match) {
+      return decodeURIComponent(match[1]);
+    }
+  }
+
+  return null;
+}
+
 /**
  * Authentication Middleware.
- * Enforces valid Supabase JWT Bearer token on protected endpoints.
+ * Enforces valid Hopper / Supabase JWT token via Authorization Bearer header
+ * or secure same-origin HttpOnly `hopper_session` cookie.
  * Never accepts unverified payloads or spoofed headers.
  */
 export function requireAuth(userProfileRepo?: UserProfileRepository) {
@@ -188,13 +210,12 @@ export function requireAuth(userProfileRepo?: UserProfileRepository) {
 
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
-      const authHeader = req.headers.authorization;
+      const token = extractAuthToken(req);
 
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        throw ApiError.unauthorized('Missing or malformed Authorization header. Expected format: Bearer <token>');
+      if (!token) {
+        throw ApiError.unauthorized('Missing or malformed Authorization header');
       }
 
-      const token = authHeader.slice(7).trim();
       const payload = verifyJwtToken(token);
 
       req.user = {
@@ -204,7 +225,6 @@ export function requireAuth(userProfileRepo?: UserProfileRepository) {
         login: payload.login || payload.user_metadata?.user_name || (payload.email ? payload.email.split('@')[0] : 'user'),
         github_user_id: payload.github_user_id,
         avatar_url: payload.avatar_url || payload.user_metadata?.avatar_url,
-        github_token: payload.github_token || payload.github_access_token,
         app_metadata: payload.app_metadata,
         user_metadata: payload.user_metadata,
       };
@@ -246,10 +266,9 @@ export function requireAuth(userProfileRepo?: UserProfileRepository) {
  */
 export function optionalAuth() {
   return async (req: Request, _res: Response, next: NextFunction) => {
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = extractAuthToken(req);
+    if (token) {
       try {
-        const token = authHeader.slice(7).trim();
         const payload = verifyJwtToken(token);
         if (payload.sub) {
           req.user = {
@@ -259,7 +278,6 @@ export function optionalAuth() {
             login: payload.login || (payload.email ? payload.email.split('@')[0] : 'user'),
             github_user_id: payload.github_user_id,
             avatar_url: payload.avatar_url,
-            github_token: payload.github_token || payload.github_access_token,
           };
         }
       } catch (_err) {

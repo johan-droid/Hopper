@@ -50,13 +50,15 @@ export function getGitHubClientSecret(): string {
 
 /**
  * Builds the GitHub OAuth authorization URL for user login.
+ * Requests minimal identity scopes (read:user, user:email).
+ * Repository permissions are granted separately via GitHub App installations.
  */
 export function getGitHubOAuthUrl(state: string, redirectUri?: string): string {
   const clientId = getGitHubClientId();
   const base = 'https://github.com/login/oauth/authorize';
   const params = new URLSearchParams({
     client_id: clientId,
-    scope: 'read:user,user:email,read:org,repo',
+    scope: 'read:user,user:email',
     state,
   });
 
@@ -82,7 +84,7 @@ export async function exchangeCodeForToken(
   ) {
     return {
       accessToken: `gho_mock_${code}_token_${Date.now()}`,
-      scope: 'read:user,user:email,read:org,repo',
+      scope: 'read:user,user:email',
     };
   }
 
@@ -263,7 +265,7 @@ export function createSessionToken(
   userId: string,
   userProfileId: string,
   workspaceId: string,
-  options: { expiresInSeconds?: number; githubToken?: string } = {}
+  options: { expiresInSeconds?: number } = {}
 ): string {
   const isProduction = process.env.NODE_ENV === 'production';
   const configuredSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET;
@@ -287,7 +289,6 @@ export function createSessionToken(
       email: user.email,
       name: user.name,
       avatar_url: user.avatarUrl,
-      github_token: options.githubToken,
       role: 'authenticated',
       iat: now,
       nbf: now - 10,

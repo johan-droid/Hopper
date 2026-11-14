@@ -19,6 +19,14 @@ type StateCategory =
   | 'unavailable'
   | 'unknown';
 
+interface QueueMetrics {
+  pending: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  dead: number;
+}
+
 interface StateNode {
   id: string;
   label: string;
@@ -44,14 +52,17 @@ export const BackendStateVisualization: React.FC = () => {
   const isDegraded = !isLoading && !isError && health?.status === 'degraded';
   const isOffline = isError || (!isLoading && !health);
 
-  // Extract real queue metrics if available
+  // Extract real queue metrics if available. The backend nests counts under
+  // dependencies.queue.metrics ({ pending, processing, completed, failed, dead }).
   const queueDeps = health?.dependencies?.queue;
   const dbDeps = health?.dependencies?.database;
   const coordDeps = health?.dependencies?.coordination;
 
-  const pendingCount = queueDeps?.pending ?? 0;
-  const processingCount = (queueDeps as any)?.metrics?.processing ?? 0;
-  const deadLetterCount = (queueDeps as any)?.deadLetters ?? 0;
+  const queueMetrics = (queueDeps as { metrics?: Partial<QueueMetrics> } | undefined)?.metrics;
+  const pendingCount = queueMetrics?.pending ?? 0;
+  const processingCount = queueMetrics?.processing ?? 0;
+  const deadLetterCount = (queueDeps as { deadLetters?: number } | undefined)?.deadLetters ?? 0;
+  const hasLiveQueueData = queueMetrics != null;
 
   // Real backend state nodes grounded in PostgreSQL outbox architecture
   const nodes: StateNode[] = [
@@ -66,13 +77,14 @@ export const BackendStateVisualization: React.FC = () => {
     {
       id: 'outbox',
       label: 'Durable Outbox Queued',
-      state: isHealthy
-        ? pendingCount > 0
-          ? 'queued'
-          : 'completed'
-        : isOffline
-        ? 'unavailable'
-        : 'unknown',
+      state:
+        isHealthy && hasLiveQueueData
+          ? pendingCount > 0
+            ? 'queued'
+            : 'completed'
+          : isOffline
+          ? 'unavailable'
+          : 'unknown',
       subsystem: 'PostgreSQL Outbox',
       tableOrFunction: 'hopper_job_queue (pending)',
       description: 'Transactional persistence before HTTP 202 acknowledgement. Guarantees at-least-once delivery with idempotency key uniqueness.',
@@ -80,13 +92,14 @@ export const BackendStateVisualization: React.FC = () => {
     {
       id: 'claim',
       label: 'Worker Lease Claim',
-      state: isHealthy
-        ? processingCount > 0
-          ? 'processing'
-          : 'completed'
-        : isOffline
-        ? 'unavailable'
-        : 'unknown',
+      state:
+        isHealthy && hasLiveQueueData
+          ? processingCount > 0
+            ? 'processing'
+            : 'completed'
+          : isOffline
+          ? 'unavailable'
+          : 'unknown',
       subsystem: 'Background Worker',
       tableOrFunction: 'hopper_claim_next_job (SKIP LOCKED)',
       description: 'Atomic distributed job lease without mutex contention. Sets locked_by and lock_expires_at with heartbeat renewals.',
@@ -206,7 +219,7 @@ export const BackendStateVisualization: React.FC = () => {
                 {isLoading
                   ? 'Querying /api/health...'
                   : isHealthy
-                  ? 'System 100% Operational'
+                  ? 'All Systems Operational'
                   : isDegraded
                   ? 'Degraded Performance'
                   : 'Backend Standby (Local)'}
@@ -237,10 +250,14 @@ export const BackendStateVisualization: React.FC = () => {
               <span className="text-emerald-400">pgvector ready</span>
             </div>
             <div className="text-xl font-bold text-white font-mono">
-              {isHealthy ? `${dbDeps?.latencyMs ?? 2.1}ms` : isOffline ? 'Local Docker' : 'Connecting...'}
+              {isHealthy
+                ? `${dbDeps?.latencyMs ?? '—'}ms`
+                : isOffline
+                ? 'Offline'
+                : 'Connecting...'}
             </div>
             <span className="text-[11px] text-ink-secondary block">
-              {isHealthy ? 'Connection pool healthy · RLS active' : 'Run npm run infra:up to start container'}
+              {isHealthy ? 'Connection pool healthy · RLS active' : 'Live database telemetry unavailable in standby mode'}
             </span>
           </div>
 
@@ -254,7 +271,11 @@ export const BackendStateVisualization: React.FC = () => {
               <span className="text-white">{isHealthy ? 'SKIP LOCKED' : 'Postgres'}</span>
             </div>
             <div className="text-xl font-bold text-white font-mono">
-              {isHealthy ? `${pendingCount} pending` : isOffline ? '0 jobs' : 'Polling...'}
+              {isHealthy
+                ? `${pendingCount} pending`
+                : isOffline
+                ? '—'
+                : 'Polling...'}
             </div>
             <span className="text-[11px] text-ink-secondary block">
               Durable at-least-once outbox storage

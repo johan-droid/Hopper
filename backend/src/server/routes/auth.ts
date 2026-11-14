@@ -46,8 +46,10 @@ export function createAuthRouter(
     oauthStateCache.add(state);
     setTimeout(() => oauthStateCache.delete(state), 10 * 60 * 1000);
 
-    const redirectUri = (req.query.redirect_uri as string) || undefined;
-    const authUrl = getGitHubOAuthUrl(state, redirectUri);
+    // redirect_uri is never accepted from the client: GitHub validates it against
+    // the registered callback URL for the OAuth app, and a client-supplied value
+    // opens a prefix-match open-redirect surface.
+    const authUrl = getGitHubOAuthUrl(state);
 
     if (req.headers.accept?.includes('application/json') || req.query.format === 'json') {
       res.json({ url: authUrl, state });
@@ -129,14 +131,21 @@ export function createAuthRouter(
         console.warn(`[AuthCallback] Initial sync warning: ${syncErr.message}`);
       }
 
-      // 6. Mint Hopper Session Token with authoritative GitHub access token
-      const token = createSessionToken(ghUser, userUuid, profile.id, activeWorkspaceId, {
-        githubToken: accessToken,
+      // 6. Mint Hopper Session Token encoding verified user identity (no leaked provider token)
+      const token = createSessionToken(ghUser, userUuid, profile.id, activeWorkspaceId);
+
+      // 7. Set secure HttpOnly, SameSite=Lax cookie for same-origin session
+      res.cookie('hopper_session', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       });
 
-      // 7. Complete login
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      const redirectTarget = `${frontendUrl}/login/callback?token=${token}&login=${encodeURIComponent(ghUser.login)}`;
+      // 8. Complete login without leaking session tokens into URL query strings
+      const frontendUrl = process.env.FRONTEND_URL || '';
+      const redirectTarget = `${frontendUrl}/app/overview`;
 
       if (req.headers.accept?.includes('application/json') || req.query.format === 'json') {
         res.json({
@@ -157,9 +166,18 @@ export function createAuthRouter(
   /**
    * POST /api/auth/github/token
    * Direct authentication via GitHub Personal Access Token or OAuth token.
+   * Public PAT sign-in is retired in production in favor of GitHub OAuth Web Application flow.
    */
   router.post('/github/token', async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (process.env.NODE_ENV === 'production') {
+        const internalKey = process.env.INTERNAL_SERVICE_KEY;
+        const isInternal = Boolean(internalKey && req.headers['x-hopper-internal-auth'] === internalKey);
+        if (!isInternal) {
+          throw ApiError.forbidden('Public Personal Access Token login is retired. Please authenticate via GitHub OAuth.');
+        }
+      }
+
       const { token: ghToken } = req.body;
 
       if (!ghToken || typeof ghToken !== 'string') {
@@ -209,9 +227,16 @@ export function createAuthRouter(
         workspaceId: activeWorkspaceId,
       });
 
-      // 5. Mint Hopper Session JWT
-      const sessionToken = createSessionToken(ghUser, userUuid, profile.id, activeWorkspaceId, {
-        githubToken: ghToken,
+      // 5. Mint Hopper Session JWT (no leaked provider credentials)
+      const sessionToken = createSessionToken(ghUser, userUuid, profile.id, activeWorkspaceId);
+
+      // 6. Set secure HttpOnly cookie
+      res.cookie('hopper_session', sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
       res.json({
@@ -228,6 +253,20 @@ export function createAuthRouter(
     } catch (err) {
       next(err);
     }
+  });
+
+  /**
+   * POST /api/auth/logout
+   * Invalidates session cookie and terminates active session.
+   */
+  router.post('/logout', (_req: Request, res: Response) => {
+    res.clearCookie('hopper_session', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+    });
+    res.json({ success: true, message: 'Logged out successfully' });
   });
 
   /**
@@ -282,8 +321,14 @@ export function createAuthRouter(
         workspaceId: activeWorkspaceId,
       });
 
-      const sessionToken = createSessionToken(ghUser, userUuid, profile.id, activeWorkspaceId, {
-        githubToken: `gho_dev_${login}`,
+      const sessionToken = createSessionToken(ghUser, userUuid, profile.id, activeWorkspaceId);
+
+      res.cookie('hopper_session', sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
       res.json({
@@ -351,7 +396,6 @@ export function createAuthRouter(
       };
 
       const githubToken =
-        req.user?.github_token ||
         (req.body?.githubToken as string) ||
         (req.headers['x-github-token'] as string) ||
         undefined;
@@ -369,14 +413,6 @@ export function createAuthRouter(
     } catch (err) {
       next(err);
     }
-  });
-
-  /**
-   * POST /api/auth/logout
-   * Clears authenticated session.
-   */
-  router.post('/logout', (_req: Request, res: Response) => {
-    res.json({ success: true, message: 'Logged out successfully' });
   });
 
   return router;

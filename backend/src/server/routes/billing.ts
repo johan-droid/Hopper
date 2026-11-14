@@ -26,13 +26,23 @@ export function createBillingRouter(): Router {
     const frontendBase = process.env.FRONTEND_URL || 'http://localhost:5173';
 
     if (!stripeConfigured) {
-      // Commercial monetization deferred: Return free tier validation response
-      return res.status(200).json({
-        sessionId: `val_sess_${Date.now()}`,
-        url: successUrl || `${frontendBase}/billing?success=true`,
+      if (process.env.NODE_ENV === 'test' || process.env.AI_PROVIDER === 'mock') {
+        const mockSessionId = `val_sess_${Date.now()}`;
+        return res.status(200).json({
+          sessionId: mockSessionId,
+          checkoutUrl: `https://checkout.stripe.com/c/pay/${mockSessionId}`,
+          url: successUrl || `${frontendBase}/billing?success=true`,
+          plan,
+          mode: 'validation_free_tier',
+          message: 'Hopper is currently running in unrestricted validation mode. All features are accessible without payment.',
+        });
+      }
+
+      return res.status(503).json({
+        error: 'Stripe billing is not configured in this environment. Live subscription checkout is currently blocked pending Stripe credential provisioning.',
+        configured: false,
+        status: 'blocked',
         plan,
-        mode: 'validation_free_tier',
-        message: 'Hopper is currently running in unrestricted validation mode. All features are accessible without payment.',
       });
     }
 

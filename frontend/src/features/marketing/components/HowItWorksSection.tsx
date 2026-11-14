@@ -40,7 +40,7 @@ const LIFECYCLE_STEPS: PipelineStep[] = [
   {
     number: '03',
     title: 'Failure Fingerprinting & Cloud Moat',
-    category: 'AST Normalization',
+    category: 'Token Normalization',
     summary: 'Collapses identical failures across runs, branches, and PRs into a canonical signature.',
     detail: 'Masks dynamic tokens (UUIDs, timestamps, memory addresses, line/column coordinates). Generates canonical signature_hash = SHA256(job_name + step_name + normalized_template) stored in PostgreSQL with pgvector embeddings.',
     invariant: 'SHA-256 Canonical Normalization + pgvector',

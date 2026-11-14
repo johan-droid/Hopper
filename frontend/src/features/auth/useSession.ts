@@ -174,18 +174,18 @@ export function useSessionBootstrap(): void {
         }
       }
 
-      // 2. Check Hopper GitHub auth token in storage
+      // 2. Authoritative check: verify session with backend via HttpOnly cookie or stored token
       const storedToken = typeof window !== 'undefined' ? localStorage.getItem('hopper_auth_token') : null;
-      if (storedToken) {
-        try {
-          const authMe = await api.getAuthMe();
-          if (active && authMe.success) {
-            const hopperSession = buildHopperSession(storedToken, authMe.user);
-            setSession(hopperSession);
-            return;
-          }
-        } catch {
-          // If token verification failed, try using claims directly or clear stale token
+      try {
+        const authMe = await api.getAuthMe();
+        if (active && authMe.success) {
+          const hopperSession = buildHopperSession(storedToken || 'cookie-session', authMe.user);
+          setSession(hopperSession);
+          return;
+        }
+      } catch {
+        // If server verification fails, clear any stale stored token unless still unexpired locally
+        if (storedToken && typeof window !== 'undefined') {
           const claims = parseJwtPayload(storedToken);
           if (claims && claims.exp && claims.exp > Date.now() / 1000) {
             if (active) {

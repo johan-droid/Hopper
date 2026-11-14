@@ -32,7 +32,9 @@ The local development environment is 100% self-contained (requiring only Postgre
 | **Row-Level Security (RLS)** | **WORKING** | `backend/supabase/migrations/0005`, `0011` | Cross-tenant rejection in `security-tenant-isolation.test.ts` |
 | **Serverless OAuth State** | **WORKING** | `backend/src/server/routes/auth.ts` | HMAC-signed state tested in `github-auth-sync.test.ts` |
 | **Stripe Billing Lifecycle** | **WORKING** | `backend/src/server/routes/billing.ts` | Webhooks and checkout tested in `stripe-billing.test.ts` |
-| **Next.js 14 App Router** | **WORKING** | `frontend/app/` (20 prerendered routes) | `next build` static export & SSR compilation check |
+| **Next.js 14 App Router** | **WORKING** | `frontend/app/` (20 prerendered routes) | `next build` static export & SSR compilation check (0 errors, 0 warnings) |
+| **HttpOnly Cookie Sessions** | **WORKING** | `backend/src/server/routes/auth.ts`, `frontend/src/features/auth/useSession.ts` | Eliminates tokens in URL; verified cookie extraction |
+| **Minimal OAuth Identity** | **WORKING** | `backend/src/lib/github/user-auth.ts` | Scoped strictly to `read:user,user:email`; tested in `github-auth-sync.test.ts` |
 | **Single-Agent Governance** | **ENFORCED** | `AGENTS.md` | Single primary agent policy documented and enforced |
 | **Live GitHub App Ingress** | **GATED** | `backend/src/lib/github/` | Requires production `GITHUB_APP_PRIVATE_KEY` |
 | **Live Stripe Webhooks** | **GATED** | `backend/src/lib/billing/` | Requires production `STRIPE_WEBHOOK_SECRET` |
