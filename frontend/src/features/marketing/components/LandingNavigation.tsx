@@ -4,7 +4,8 @@ import { ROUTES } from '../../../lib/routes';
 import { useSession } from '../../auth/useSession';
 import { useHealthQuery } from '../../../api/hooks';
 import { Badge } from '../../../components/ui/primitives';
-import { Zap, Menu, X, ArrowRight, Activity, Github } from 'lucide-react';
+import { GithubIcon } from '../../../components/ui/primitives';
+import { Zap, Menu, X, ArrowRight, Activity } from 'lucide-react';
 
 export const LandingNavigation: React.FC = () => {
   const { isAuthenticated } = useSession();
@@ -170,7 +171,7 @@ export const LandingNavigation: React.FC = () => {
                 className="flex items-center justify-center gap-2 rounded-lg bg-white py-2.5 text-xs font-semibold text-neutral-950"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <Github className="h-4 w-4" />
+                <GithubIcon className="h-4 w-4" />
                 <span>{isAuthenticated ? 'Open Dashboard' : 'Continue with GitHub'}</span>
               </Link>
             </div>
