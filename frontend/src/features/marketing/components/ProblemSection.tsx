@@ -6,158 +6,190 @@ import {
   ShieldAlert,
   ShieldCheck,
   RefreshCw,
+  Clock,
   GitPullRequest,
   Fingerprint,
   Zap,
 } from 'lucide-react';
 
+const PAIN_POINTS = [
+  {
+    icon: AlertTriangle,
+    title: 'Unbounded Log Archaeology',
+    body: 'GitHub shows a 50MB+ raw terminal dump. You scroll, ctrl+F, miss context, give up and re-run the job hoping it was a fluke.',
+  },
+  {
+    icon: RefreshCw,
+    title: 'Blind Re-Runs',
+    body: 'Teams re-run 30-minute pipelines without knowing if the failure is deterministic or flaky. Cloud compute evaporates. Developers context-switch.',
+  },
+  {
+    icon: ShieldAlert,
+    title: 'Credentials in Plain Sight',
+    body: 'AWS keys, GitHub tokens, and DB URIs leak into runner logs. They propagate to CI artifact stores, log aggregators, and PR comments.',
+  },
+  {
+    icon: Clock,
+    title: 'Duplicate Diagnosis Work',
+    body: 'Three developers on the same team investigate the same fingerprinted failure on separate branches, write the same Slack messages.',
+  },
+];
+
+const AFTER_ITEMS = [
+  { icon: Zap,            text: 'Webhook ingested in <50ms with HMAC-SHA256 verification' },
+  { icon: Fingerprint,    text: 'SHA-256 canonical fingerprint collapses duplicate failures' },
+  { icon: ShieldCheck,    text: 'Credentials scrubbed from log before LLM context window' },
+  { icon: GitPullRequest, text: 'Sticky PR comment updated — not spammed — with root cause' },
+];
+
 export const ProblemSection: React.FC = () => {
   return (
-    <section id="problem" className="relative border-t border-hairline/70 bg-raised/20 py-16 sm:py-24">
+    <section id="problem" className="relative border-t border-hairline/60 py-16 sm:py-24 bg-raised/10">
+      {/* Subtle top gradient */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-rose-500/30 to-transparent"
+      />
+
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Section Header */}
-        <div className="mx-auto max-w-3xl text-center space-y-3">
+
+        {/* ── HEADER ── */}
+        <div className="mx-auto max-w-3xl text-center space-y-4">
           <div className="inline-flex items-center gap-2 rounded-full border border-hairline bg-inset px-3 py-1 text-xs font-mono text-ink-muted">
-            <span>THE DEVELOPER BOTTLENECK</span>
+            THE DEVELOPER BOTTLENECK
           </div>
           <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
             A red build is not a diagnosis.
           </h2>
           <p className="text-sm sm:text-base text-ink-secondary leading-relaxed">
-            Continuous integration engines alert you when a test or step exits with a non-zero code. But developers spend hours sifting through raw terminal dumps to find out why it failed, whether it is flaky, or if someone else already diagnosed it.
+            CI runners tell you <em className="text-white not-italic">that</em> something failed.
+            Developers spend hours figuring out <em className="text-white not-italic">why</em>,
+            whether it matters, and whether anyone else already fixed it.
           </p>
         </div>
 
-        {/* Side-by-Side Comparison */}
-        <div className="mt-12 lg:mt-16 grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 items-stretch">
-          {/* Card 1: The Raw Failure Nightmare */}
-          <div className="flex flex-col justify-between rounded-2xl border border-rose-500/30 bg-canvas/90 p-6 sm:p-8 shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-36 h-36 bg-rose-500/5 rounded-full blur-2xl pointer-events-none" />
-
-            <div className="space-y-5">
-              <div className="flex items-center justify-between pb-4 border-b border-hairline/60">
-                <div className="flex items-center gap-2.5">
-                  <XCircle className="h-5 w-5 text-rose-500" />
-                  <span className="font-semibold text-white text-base">The Raw CI Failure Experience</span>
+        {/* ── PAIN GRID ── */}
+        <div className="mt-14 grid grid-cols-1 sm:grid-cols-2 gap-5">
+          {PAIN_POINTS.map((p) => {
+            const Icon = p.icon;
+            return (
+              <div
+                key={p.title}
+                className="group flex gap-4 rounded-xl border border-rose-500/15 bg-canvas p-5 transition-colors hover:border-rose-500/30 hover:bg-rose-950/10"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-rose-500/20 bg-rose-950/30 text-rose-400 group-hover:border-rose-500/40 transition-colors">
+                  <Icon className="h-4 w-4" />
                 </div>
-                <span className="font-mono text-[10px] text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
-                  Current Pain
-                </span>
+                <div className="space-y-1.5">
+                  <h3 className="text-sm font-semibold text-white">{p.title}</h3>
+                  <p className="text-xs text-ink-secondary leading-relaxed">{p.body}</p>
+                </div>
               </div>
+            );
+          })}
+        </div>
 
-              {/* Monospace terminal simulation of raw failure */}
-              <div className="rounded-lg border border-hairline/70 bg-black/60 p-4 font-mono text-xs text-slate-300 space-y-2 select-text">
-                <div className="text-ink-muted text-[11px] flex items-center justify-between pb-1 border-b border-white/5">
-                  <span>github-actions://runs/8492019482/job/19481029481</span>
-                  <span>52.4 MB Log</span>
+        {/* ── BEFORE / AFTER COMPARISON ── */}
+        <div className="mt-14 grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+          {/* BEFORE */}
+          <div className="rounded-2xl border border-rose-500/25 bg-canvas/90 overflow-hidden shadow-xl">
+            <div className="flex items-center gap-2.5 border-b border-hairline/60 px-5 py-3.5 bg-rose-950/20">
+              <XCircle className="h-4 w-4 text-rose-500" />
+              <span className="text-sm font-semibold text-white">Without Hopper</span>
+              <span className="ml-auto font-mono text-[10px] text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20">
+                Current
+              </span>
+            </div>
+            <div className="p-5 space-y-3">
+              {/* Raw log terminal */}
+              <div className="rounded-lg border border-hairline/50 bg-black/70 p-4 font-mono text-xs text-slate-300 space-y-1.5">
+                <div className="text-ink-muted text-[10px] flex items-center justify-between pb-2 border-b border-white/5 mb-2">
+                  <span>github-actions://runs/8492019482/jobs/19481029481</span>
+                  <span className="text-rose-400">52.4 MB</span>
                 </div>
-                <p className="text-neutral-500">##[group]Setting up container runner 2.319.0...</p>
-                <p className="text-neutral-500">##[group]Run actions/checkout@v4...</p>
-                <p className="text-neutral-500">... [84,000 lines omitted] ...</p>
+                <p className="text-neutral-600">##[group]Setting up container runner 2.319.0...</p>
+                <p className="text-neutral-600">##[group]Run actions/setup-node@v4...</p>
+                <p className="text-neutral-500 italic">... 84,219 lines omitted ...</p>
                 <p className="text-rose-400 font-semibold">
-                  FAIL src/auth/jwt-verifier.spec.ts &gt; rejects expired token
+                  FAIL src/auth/jwt-verifier.spec.ts {'>'} rejects expired token
                 </p>
                 <p className="text-rose-300">
                   AssertionError: expected 'active' to deeply equal 'expired'
                 </p>
-                <p className="text-amber-300/80">
-                  ENV_AWS_KEY=AKIAIOSFODNN7EXAMPLE (leaked in unscrubbed runner log)
+                <p className="text-amber-400/70">
+                  ENV_SECRET=AKIAIOSFODNN7EXAMPLE (leaked)
                 </p>
-                <p className="text-neutral-500">
-                  Error: Process completed with exit code 1.
-                </p>
+                <p className="text-neutral-500">Process completed with exit code 1.</p>
               </div>
 
-              {/* Friction points list */}
-              <ul className="space-y-3 pt-2 text-xs text-ink-secondary">
-                <li className="flex items-start gap-2.5">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
-                  <span>
-                    <strong className="text-white">Unbounded Data Sifting:</strong> Developers scroll through 50MB+ raw archives, ANSI control artifacts, and irrelevant step logs.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <RefreshCw className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
-                  <span>
-                    <strong className="text-white">Blind Re-Runs:</strong> Teams re-run whole 30-minute pipelines hoping for a green pass, wasting cloud compute without knowing if the failure was non-deterministic.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
-                  <span>
-                    <strong className="text-white">Secret Exposure Risks:</strong> Sensitive AWS keys, tokens, and DB connection strings printed in stdout remain unredacted in raw log storage.
-                  </span>
-                </li>
+              {/* Developer workflow without Hopper */}
+              <ul className="space-y-2.5 pt-1">
+                {[
+                  'Open 52MB log in browser — wait 8s to load',
+                  'Ctrl+F "error" — 1,847 matches, all ANSI noise',
+                  'Paste log into ChatGPT — context window exceeded',
+                  'Re-run the job and go get coffee',
+                  'Come back to same failure 30 minutes later',
+                ].map((step) => (
+                  <li key={step} className="flex items-start gap-2 text-xs text-ink-secondary">
+                    <XCircle className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
+                    <span>{step}</span>
+                  </li>
+                ))}
               </ul>
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-hairline/40 text-xs font-mono text-ink-muted">
-              Result: 20-45 minutes wasted per failing build
+              <div className="pt-2 font-mono text-xs text-rose-400 border-t border-hairline/50">
+                Mean time to diagnosis: <span className="font-bold">47 minutes</span>
+              </div>
             </div>
           </div>
 
-          {/* Card 2: The Hopper Investigation Experience */}
-          <div className="flex flex-col justify-between rounded-2xl border border-hairline bg-raised/80 p-6 sm:p-8 shadow-xl relative overflow-hidden ring-1 ring-white/5">
-            <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
-
-            <div className="space-y-5">
-              <div className="flex items-center justify-between pb-4 border-b border-hairline/60">
-                <div className="flex items-center gap-2.5">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                  <span className="font-semibold text-white text-base">Hopper Structured Investigation</span>
-                </div>
-                <span className="font-mono text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                  Verified Invariant
-                </span>
-              </div>
-
-              {/* Monospace diagnosis preview */}
-              <div className="rounded-lg border border-hairline/70 bg-black/70 p-4 font-mono text-xs text-slate-200 space-y-2 select-text">
-                <div className="text-ink-muted text-[11px] flex items-center justify-between pb-1 border-b border-white/5">
-                  <span className="flex items-center gap-1.5 text-rose-400">
-                    <Zap className="h-3.5 w-3.5" />
-                    <span>SHA-256 Fingerprint Moat</span>
-                  </span>
-                  <span className="text-emerald-400 font-semibold">Flakiness: 84.5%</span>
-                </div>
-                <p className="text-white font-medium">
-                  Root Cause: Stale token evaluation due to clock drift before mock freeze.
-                </p>
-                <div className="p-2 rounded bg-black/60 border border-hairline/60 text-[11px] space-y-1">
-                  <p className="text-rose-400">- const token = generateToken(); vi.useFakeTimers();</p>
-                  <p className="text-emerald-400">+ vi.useFakeTimers(); const token = generateToken();</p>
-                </div>
-                <p className="text-ink-muted text-[11px]">
-                  Secrets Redacted: <span className="text-rose-400">[REDACTED_AWS_KEY]</span> · Line: 42:15
-                </p>
-              </div>
-
-              {/* Value capabilities list */}
-              <ul className="space-y-3 pt-2 text-xs text-ink-secondary">
-                <li className="flex items-start gap-2.5">
-                  <Fingerprint className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
-                  <span>
-                    <strong className="text-white">Normalized Fingerprint Moat:</strong> Dynamic UUIDs, memory addresses, and line numbers are masked to collapse repeat occurrences across runs into one canonical signature.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
-                  <span>
-                    <strong className="text-white">Deterministic Secret Scrubbing:</strong> AWS keys, GitHub tokens, database URIs, and SSH keys are scrubbed before storage or model prompting.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <GitPullRequest className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
-                  <span>
-                    <strong className="text-white">Sticky PR Comment:</strong> Delivers root cause diagnosis and unified diff directly to the PR thread, updating continuously without noisy notifications.
-                  </span>
-                </li>
-              </ul>
+          {/* AFTER */}
+          <div className="rounded-2xl border border-cyan-500/25 bg-canvas/90 overflow-hidden shadow-xl">
+            <div className="flex items-center gap-2.5 border-b border-hairline/60 px-5 py-3.5 bg-cyan-950/20">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              <span className="text-sm font-semibold text-white">With Hopper</span>
+              <span className="ml-auto font-mono text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                14.2s
+              </span>
             </div>
+            <div className="p-5 space-y-3">
+              {/* Diagnosis result */}
+              <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-4 font-mono text-xs space-y-2">
+                <div className="text-[10px] font-mono text-cyan-400 uppercase tracking-wider pb-1 border-b border-cyan-500/20 mb-1">
+                  {'<!-- ci-doctor-sticky-comment -->'}
+                </div>
+                <p className="text-slate-200 font-sans text-xs leading-relaxed">
+                  <strong className="text-white">Root Cause:</strong> Test fixture initializes{' '}
+                  <code className="text-cyan-300">expires_at</code> before fake timers are
+                  installed, so the JWT verifier reads a wall-clock expired timestamp.
+                </p>
+                <pre className="text-[11px] bg-black/40 rounded p-2 overflow-x-auto text-slate-300">
+{`- const token = generateTestToken({ ttl: 3600 });
+- vi.useFakeTimers();
++ vi.useFakeTimers();
++ const token = generateTestToken({ ttl: 3600 });`}
+                </pre>
+                <p className="text-[10px] text-cyan-300/70">
+                  Confidence: 94% · Flakiness: 12% (non-flaky) · sig: e3b0c44298fc1c14…
+                </p>
+              </div>
 
-            <div className="mt-6 pt-4 border-t border-hairline/40 text-xs font-mono text-emerald-400 flex items-center justify-between">
-              <span>Result: Sub-15s actionable root cause</span>
-              <span>Zero PR Noise</span>
+              {/* Hopper workflow */}
+              <ul className="space-y-2.5 pt-1">
+                {AFTER_ITEMS.map((a) => {
+                  const Icon = a.icon;
+                  return (
+                    <li key={a.text} className="flex items-start gap-2 text-xs text-ink-secondary">
+                      <Icon className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                      <span>{a.text}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="pt-2 font-mono text-xs text-emerald-400 border-t border-hairline/50">
+                Mean time to diagnosis: <span className="font-bold">14.2 seconds</span>
+              </div>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ROUTES } from '../../../lib/routes';
-import { Zap, Github, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Zap, ArrowRight, ShieldCheck } from 'lucide-react';
 import { GithubIcon } from '../../../components/ui/primitives';
 
 export const LandingFooter: React.FC = () => {
@@ -167,7 +167,7 @@ export const LandingFooter: React.FC = () => {
               rel="noreferrer"
               className="hover:text-white transition-colors flex items-center gap-1"
             >
-              <Github className="h-3.5 w-3.5" />
+              <GithubIcon className="h-3.5 w-3.5" />
               <span>GitHub</span>
             </a>
           </div>

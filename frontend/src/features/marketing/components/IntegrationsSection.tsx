@@ -95,7 +95,12 @@ const INTEGRATIONS: IntegrationCard[] = [
 
 export const IntegrationsSection: React.FC = () => {
   return (
-    <section id="integrations" className="relative border-t border-hairline/70 bg-raised/20 py-16 sm:py-24">
+    <section id="integrations" className="relative border-t border-hairline/60 bg-raised/10 py-16 sm:py-24">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent"
+      />
+
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="mx-auto max-w-3xl text-center space-y-3">
@@ -110,8 +115,25 @@ export const IntegrationsSection: React.FC = () => {
           </p>
         </div>
 
+        {/* Architecture Truth Strip */}
+        <div className="mt-10 mx-auto max-w-4xl rounded-xl border border-emerald-500/20 bg-emerald-950/10 px-5 py-3.5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+          <span className="text-[11px] font-mono text-emerald-400 uppercase tracking-wider mr-2">Architecture Guarantees:</span>
+          {[
+            'No Redis',
+            'No Cloudflare Workers',
+            'No BullMQ',
+            'PostgreSQL-native queue',
+            'Vercel multi-service routing',
+          ].map((fact) => (
+            <span key={fact} className="flex items-center gap-1.5 text-[11px] font-mono text-emerald-300/80">
+              <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />
+              {fact}
+            </span>
+          ))}
+        </div>
+
         {/* Integrations Grid */}
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {INTEGRATIONS.map((item) => {
             const Icon = item.icon;
             return (
