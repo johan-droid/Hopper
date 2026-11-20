@@ -45,6 +45,7 @@ import {
   terminateProcess,
   spawnSupervisedProcess,
 } from './process-manager.mjs';
+import { reclaimStalePostgresContainer } from './infra.mjs';
 
 const TOTAL_STEPS = 8;
 let isShuttingDown = false;
@@ -181,6 +182,7 @@ async function main() {
   if (!pgHealth.healthy) {
     orchestratorLog('Starting hopper-postgres via docker compose...');
     try {
+      reclaimStalePostgresContainer();
       run('docker compose up -d hopper-postgres');
       infrastructureState.postgresManaged = true;
     } catch (err) {
@@ -275,7 +277,7 @@ async function main() {
   activeProcesses.frontend = spawnSupervisedProcess({
     name: 'frontend',
     command: 'npm',
-    args: ['--prefix', 'frontend', 'run', 'dev'],
+    args: ['--prefix', 'frontend', 'run', 'dev', '--', '-p', String(PORTS.frontend)],
     cwd: REPO_ROOT,
     env: { VITE_API_URL: URLS.backend },
     onFatalExit: onChildFatal,

@@ -338,11 +338,16 @@ export function createApp(options: CreateAppOptions = {}) {
 </html>`);
   });
 
-  app.get('/', (_req: Request, res: Response) => {
+  app.get('/', (req: Request, res: Response) => {
+    const frontendUrl = process.env.FRONTEND_URL || process.env.VERCEL_URL || 'http://localhost:5173';
+    // If opened directly in a browser (which includes text/html in the Accept header), redirect to the frontend landing page
+    if (req.headers.accept?.includes('text/html')) {
+      return res.redirect(frontendUrl);
+    }
     res.json({
       service: 'Hopper CI Failure Diagnosis Engine API Gateway',
       version: '1.0.0',
-      frontendUrl: process.env.FRONTEND_URL || process.env.VERCEL_URL || 'http://localhost:5173',
+      frontendUrl,
       health: '/api/health',
     });
   });

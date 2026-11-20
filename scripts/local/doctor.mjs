@@ -50,9 +50,10 @@ async function main() {
   );
 
   // Dependencies
-  record('Root dependencies', fs.existsSync(path.join(REPO_ROOT, 'node_modules')) ? 'ok' : 'fail', 'node_modules');
-  record('Backend dependencies', fs.existsSync(path.join(BACKEND_DIR, 'node_modules')) ? 'ok' : 'fail', 'backend/node_modules');
-  record('Frontend dependencies', fs.existsSync(path.join(FRONTEND_DIR, 'node_modules')) ? 'ok' : 'fail', 'frontend/node_modules');
+  const rootNodeModules = fs.existsSync(path.join(REPO_ROOT, 'node_modules'));
+  record('Root dependencies', rootNodeModules ? 'ok' : 'fail', 'node_modules');
+  record('Backend dependencies', (fs.existsSync(path.join(BACKEND_DIR, 'node_modules')) || rootNodeModules) ? 'ok' : 'fail', 'backend/node_modules');
+  record('Frontend dependencies', (fs.existsSync(path.join(FRONTEND_DIR, 'node_modules')) || rootNodeModules) ? 'ok' : 'fail', 'frontend/node_modules');
 
   // Environment files
   const backendEnvPath = path.join(BACKEND_DIR, '.env');

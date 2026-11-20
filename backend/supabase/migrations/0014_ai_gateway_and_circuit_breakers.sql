@@ -39,16 +39,14 @@ CREATE INDEX IF NOT EXISTS idx_ai_gw_req_org
 -- Enable RLS
 ALTER TABLE ai_gateway_requests ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS ai_gateway_requests_select_policy ON ai_gateway_requests;
 CREATE POLICY ai_gateway_requests_select_policy ON ai_gateway_requests
   FOR SELECT
   USING (
     organization_id IS NULL OR
     organization_id IN (
-      SELECT organization_id FROM workspace_organizations
-      WHERE workspace_id IN (
-        SELECT workspace_id FROM workspace_members
-        WHERE user_id = current_setting('app.current_user_id', true)::uuid
-      )
+      SELECT o.id FROM organizations o
+      WHERE o.workspace_id IN (SELECT public.get_user_workspace_ids(auth.uid()))
     )
   );
 
@@ -69,6 +67,7 @@ CREATE TABLE IF NOT EXISTS ai_circuit_breakers (
 -- Enable RLS
 ALTER TABLE ai_circuit_breakers ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS ai_circuit_breakers_select_policy ON ai_circuit_breakers;
 CREATE POLICY ai_circuit_breakers_select_policy ON ai_circuit_breakers
   FOR SELECT
   USING (true); -- Read-only inspection for system health
