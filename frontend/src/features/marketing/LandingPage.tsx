@@ -484,27 +484,8 @@ const BlurText: React.FC<{
   delay?: number;
   startDelay?: number;
   align?: 'center' | 'left';
-}> = ({ text, className = '', delay = 45, startDelay = 0, align = 'center' }) => {
-  const words = text.split(' ');
-  return (
-    <span
-      className={`inline-flex flex-wrap gap-x-[0.28em] ${
-        align === 'center' ? 'justify-center' : 'justify-start'
-      } ${className}`}
-    >
-      {words.map((word, idx) => (
-        <span
-          key={`${word}-${idx}`}
-          style={{
-            animationDelay: `${startDelay + idx * delay}ms`,
-          }}
-          className="blur-reveal-word inline-block will-change-[transform,opacity,filter]"
-        >
-          {word}
-        </span>
-      ))}
-    </span>
-  );
+}> = ({ text, className = '' }) => {
+  return <span className={className}>{text}</span>;
 };
 
 const RotatingText: React.FC<{ words: string[]; interval?: number; className?: string }> = ({
@@ -523,7 +504,7 @@ const RotatingText: React.FC<{ words: string[]; interval?: number; className?: s
 
   return (
     <span
-      className={`relative inline-flex min-w-[11ch] items-center justify-center overflow-hidden rounded-xl border border-emerald-500/25 bg-emerald-500/[0.08] px-3.5 py-1 align-middle shadow-[0_0_20px_-6px_rgba(16,185,129,0.3)] backdrop-blur-md sm:min-w-[12.2ch] sm:px-4 ${className}`}
+      className={`relative inline-flex min-w-[10ch] items-center justify-center overflow-hidden rounded-xl border border-emerald-500/30 bg-emerald-500/[0.1] px-3 py-0.5 align-middle shadow-[0_0_20px_-6px_rgba(16,185,129,0.35)] backdrop-blur-md sm:min-w-[11ch] sm:px-3.5 ${className}`}
     >
       <span
         key={words[index]}
@@ -686,36 +667,26 @@ const StarBorder: React.FC<{
   children: React.ReactNode;
   className?: string;
   innerClassName?: string;
-  color?: string;
-  secondaryColor?: string;
   rounded?: string;
   onClick?: () => void;
 }> = ({
   children,
   className = '',
   innerClassName = '',
-  color = '#10B981',
-  secondaryColor = '#06B6D4',
   rounded = 'rounded-xl',
   onClick,
 }) => (
-  <div
+  <button
+    type="button"
     onClick={onClick}
-    className={`relative inline-flex overflow-hidden p-[1.5px] ${rounded} ${className}`}
+    className={`group relative inline-flex cursor-pointer items-center justify-center overflow-hidden border border-emerald-500/35 bg-gradient-to-b from-[#131a26] via-[#0d131d] to-[#080c14] shadow-[0_0_28px_-6px_rgba(16,185,129,0.4)] transition-all duration-200 hover:border-emerald-400/60 hover:shadow-[0_0_36px_-4px_rgba(16,185,129,0.55)] ${rounded} ${className}`}
   >
-    <span
-      aria-hidden="true"
-      className="comet-beam pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[230%]"
-      style={{
-        background: `conic-gradient(from 0deg, transparent 0deg, transparent 265deg, ${color} 315deg, ${secondaryColor} 345deg, #ffffff 355deg, transparent 360deg)`,
-      }}
-    />
     <div
-      className={`relative z-10 flex h-full w-full items-center justify-center ${rounded} ${innerClassName}`}
+      className={`relative z-10 flex h-full w-full items-center justify-center transition-colors group-hover:bg-[#162130] ${rounded} ${innerClassName}`}
     >
       {children}
     </div>
-  </div>
+  </button>
 );
 
 const Magnet: React.FC<{
@@ -852,6 +823,16 @@ const Dock: React.FC<{
   const [mouseX, setMouseX] = useState<number | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => {
+      // Reveal dock only after user scrolls past hero & live studio to prevent covering interactive controls
+      setVisible(window.scrollY > 550);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const getScale = (idx: number) => {
     if (mouseX === null) return 1;
@@ -867,7 +848,11 @@ const Dock: React.FC<{
   };
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 hidden justify-center md:flex">
+    <div
+      className={`pointer-events-none fixed inset-x-0 bottom-5 z-50 hidden justify-center transition-all duration-300 md:flex ${
+        visible ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0'
+      }`}
+    >
       <nav
         aria-label="Quick section navigation"
         onMouseMove={(e) => setMouseX(e.clientX)}
@@ -2489,7 +2474,7 @@ export const LandingPage: React.FC = () => {
         </header>
 
         {/* 2. HERO SECTION */}
-        <section className="relative overflow-hidden pt-32 pb-20 sm:pt-40 sm:pb-28">
+        <section className="relative overflow-hidden pt-28 pb-14 sm:pt-36 sm:pb-18">
           <MatteMeshBackground />
 
           <div className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6">
@@ -2508,15 +2493,17 @@ export const LandingPage: React.FC = () => {
             </div>
 
             <div className="mx-auto mt-8 max-w-4xl text-center">
-              <h1 className="tracking-obsidian text-4xl font-extrabold text-white sm:text-6xl lg:text-[66px] lg:leading-[1.12]">
-                <BlurText text="Stop digging through 40,000 log lines." delay={55} />
-                <span className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-2.5">
-                  <span className="text-zinc-100">Fix</span>
+              <h1 className="tracking-obsidian text-4xl font-extrabold text-white sm:text-6xl lg:text-[62px] lg:leading-[1.14]">
+                <span className="block text-zinc-100">
+                  Stop digging through 40,000 log lines.
+                </span>
+                <span className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-2xl font-bold text-zinc-300 sm:text-3xl lg:text-4xl">
+                  <span>Fix</span>
                   <RotatingText
                     words={['flaky tests', 'OOM crashes', 'broken builds', 'migration locks']}
                     interval={2400}
                   />
-                  <span className="text-zinc-100">in seconds.</span>
+                  <span>in seconds.</span>
                 </span>
               </h1>
 
